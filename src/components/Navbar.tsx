@@ -1,3 +1,4 @@
+import { Capacitor } from "@capacitor/core";
 import { Link, useNavigate } from "react-router-dom";
 import { Search, UserCircle, LogOut, ShieldCheck, Bell, Trash2, Settings, Download } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
@@ -118,7 +119,7 @@ export default function Navbar({ onSearch }: NavbarProps) {
       </div>
 
       <div className="flex items-center gap-3 order-2 lg:order-3">
-        {appLink && !(window.matchMedia('(display-mode: standalone)').matches || (window as any).Capacitor?.isNative) && (
+        {appLink && !Capacitor.isNativePlatform() && (
           <a
             href={appLink}
             className="flex items-center gap-2 bg-gradient-to-r from-accent to-orange-600 text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg font-bold hover:shadow-lg transition-all text-sm sm:text-base"
