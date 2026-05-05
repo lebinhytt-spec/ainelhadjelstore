@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { collection, onSnapshot, orderBy, query, doc, getDoc, updateDoc, deleteDoc, addDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { useAuth, ADMIN_EMAIL } from "../context/AuthContext";
@@ -17,6 +18,8 @@ import Swal from "sweetalert2";
 export default function Home() {
   const { user, isAdmin } = useAuth();
   const { withAd } = useAd();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [products, setProducts] = useState<any[]>([]);
   const [ads, setAds] = useState<{ top: any[], bottom: any[], inFeed: any[] }>({
@@ -45,15 +48,6 @@ export default function Home() {
       });
       setProducts(prods);
 
-      const params = new URLSearchParams(window.location.search);
-      const sharedProductId = params.get('product');
-      if (sharedProductId) {
-          const sharedProd = prods.find(p => p.id === sharedProductId || p.shortCode === sharedProductId);
-          if (sharedProd) {
-              setSelectedProduct(sharedProd);
-              window.history.replaceState({}, '', window.location.pathname);
-          }
-      }
       setIsLoading(false);
     });
 
@@ -62,6 +56,21 @@ export default function Home() {
       unsubscribeProducts();
     };
   }, []);
+
+  useEffect(() => {
+    if (products.length > 0) {
+      const params = new URLSearchParams(location.search);
+      const sharedProductId = params.get('product');
+      if (sharedProductId) {
+          const sharedProd = products.find(p => p.id === sharedProductId || p.shortCode === sharedProductId);
+          if (sharedProd) {
+              setSelectedProduct(sharedProd);
+              // Clear URL so we don't reopen it if user closes modal and browses around
+              navigate(location.pathname, { replace: true });
+          }
+      }
+    }
+  }, [location.search, products]);
 
   const [activeTab, setActiveTab] = useState<"all" | "favorites">("all");
   const [selectedCategory, setSelectedCategory] = useState<string>("الكل");

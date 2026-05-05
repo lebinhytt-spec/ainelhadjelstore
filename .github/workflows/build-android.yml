@@ -52,8 +52,7 @@ jobs:
       - name: Generate App Icons (If assets/icon.png exists)
         run: |
           if [ -f "assets/icon.png" ]; then
-            npm install -g @capacitor/assets
-            npx capacitor-assets generate --appName "AinElHadjelStore" --assetPath assets --android
+            npx @capacitor/assets generate --android
           else
             echo "No assets/icon.png found. Skipping icon generation."
           fi
