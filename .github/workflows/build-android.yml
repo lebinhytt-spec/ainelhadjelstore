@@ -38,6 +38,26 @@ jobs:
           npx cap add android
           npx cap sync android
 
+      - name: Inject Deep Link for Website
+        run: |
+          sed -i '/<\/activity>/i \
+                <intent-filter android:autoVerify="true"> \
+                    <action android:name="android.intent.action.VIEW" /> \
+                    <category android:name="android.intent.category.DEFAULT" /> \
+                    <category android:name="android.intent.category.BROWSABLE" /> \
+                    <data android:scheme="http" android:host="ainelhadjelstore.kesug.com" /> \
+                    <data android:scheme="https" android:host="ainelhadjelstore.kesug.com" /> \
+                </intent-filter>' android/app/src/main/AndroidManifest.xml
+
+      - name: Generate App Icons (If assets/icon.png exists)
+        run: |
+          if [ -f "assets/icon.png" ]; then
+            npm install -g @capacitor/assets
+            npx capacitor-assets generate --appName "AinElHadjelStore" --assetPath assets --android
+          else
+            echo "No assets/icon.png found. Skipping icon generation."
+          fi
+
       - name: Build APK
         working-directory: ./android
         run: |

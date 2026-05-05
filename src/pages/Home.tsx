@@ -146,7 +146,7 @@ export default function Home() {
 
   const handleShare = async (product: any) => {
     const codeToShare = product.shortCode || product.id;
-    const shareUrl = window.location.origin + `/?product=${codeToShare}`;
+    const shareUrl = `http://ainelhadjelstore.kesug.com/?product=${codeToShare}`;
     const shareData = {
       title: product.title,
       text: `شاهد ${product.title} على متجر عين الحجل!`,

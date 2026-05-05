@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
-import { collection, onSnapshot, orderBy, query, doc, deleteDoc, updateDoc, addDoc, where, collectionGroup, getDoc } from "firebase/firestore";
-import { db } from "../lib/firebase";
+import { useEffect, useState, ChangeEvent } from "react";
+import { collection, onSnapshot, orderBy, query, doc, deleteDoc, updateDoc, addDoc, where, collectionGroup, getDoc, setDoc } from "firebase/firestore";
+import { db, storage } from "../lib/firebase";
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate, Link } from "react-router-dom";
 import Swal from "sweetalert2";
-import { ArrowRight, PlusCircle, Trash2, CheckCircle, XCircle, Crown, Database, MonitorPlay, AlertTriangle } from "lucide-react";
+import { ArrowRight, PlusCircle, Trash2, CheckCircle, XCircle, Crown, Database, MonitorPlay, AlertTriangle, Settings } from "lucide-react";
 
 export default function Admin() {
   const { isAdmin, loading } = useAuth();
@@ -21,10 +22,19 @@ export default function Admin() {
   }, [isAdmin, loading, navigate]);
 
   const [users, setUsers] = useState<any[]>([]);
-  const [activeMenu, setActiveMenu] = useState<'dashboard'|'ads'|'vip'|'reports'|'products'>('dashboard');
+  const [activeMenu, setActiveMenu] = useState<'dashboard'|'ads'|'vip'|'reports'|'products'|'appSettings'>('dashboard');
+  const [appLink, setAppLink] = useState('');
+  const [uploadingApk, setUploadingApk] = useState(false);
+  const [apkProgress, setApkProgress] = useState(0);
 
   useEffect(() => {
     if (!isAdmin) return;
+
+    const unsubSettings = onSnapshot(doc(db, "global_settings", "app"), (docSnap) => {
+      if (docSnap.exists()) {
+        setAppLink(docSnap.data().downloadLink || '');
+      }
+    });
 
     const unsubAds = onSnapshot(query(collection(db, "global_ads"), orderBy("date", "desc")), (snap) => {
       const data: any[] = [];
@@ -63,6 +73,7 @@ export default function Admin() {
     });
 
     return () => {
+      unsubSettings();
       unsubAds();
       unsubVip();
       unsubProds();
@@ -197,6 +208,51 @@ export default function Admin() {
       }
   };
 
+  const handleSaveAppSetting = async () => {
+    try {
+      await setDoc(doc(db, "global_settings", "app"), { downloadLink: appLink }, { merge: true });
+      Swal.fire('نجاح', 'تم حفظ رابط التطبيق بنجاح', 'success');
+    } catch (error) {
+      console.error(error);
+      Swal.fire('خطأ', 'حدث خطأ أثناء حفظ الإعدادات', 'error');
+    }
+  };
+
+  const handleApkUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.apk')) {
+        Swal.fire('صيغة غير مدعومة', 'الرجاء رفع ملف بصيغة APK', 'error');
+        return;
+    }
+
+    const storageRef = ref(storage, `app_builds/app_${Date.now()}.apk`);
+    const uploadTask = uploadBytesResumable(storageRef, file);
+
+    setUploadingApk(true);
+    setApkProgress(0);
+
+    uploadTask.on(
+        "state_changed",
+        (snapshot) => {
+            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+            setApkProgress(progress);
+        },
+        (error) => {
+            console.error(error);
+            Swal.fire('خطأ', 'فشل في رفع الملف', 'error');
+            setUploadingApk(false);
+        },
+        async () => {
+            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+            setAppLink(downloadURL);
+            setUploadingApk(false);
+            Swal.fire('نجاح', 'تم رفع التطبيق بنجاح. لا تنسى الضغط على "حفظ الرابط".', 'success');
+        }
+    );
+  };
+
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 font-sans flex flex-col md:flex-row" dir="rtl">
       
@@ -240,6 +296,12 @@ export default function Admin() {
                 className={`flex-none md:w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all whitespace-nowrap ${activeMenu === 'products' ? 'bg-emerald-500 border border-emerald-400 text-white shadow-lg shadow-emerald-500/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
             >
                 <Database className="w-5 h-5" /> إحصائيات المنتجات
+            </button>
+            <button 
+                onClick={() => setActiveMenu('appSettings')}
+                className={`flex-none md:w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all whitespace-nowrap ${activeMenu === 'appSettings' ? 'bg-blue-600 border border-blue-500 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+            >
+                <Settings className="w-5 h-5" /> إعدادات التطبيق
             </button>
         </div>
         <div className="p-4 border-t border-slate-700 mt-auto hidden md:block">
@@ -420,23 +482,85 @@ export default function Admin() {
         {/* God Mode - All Products */}
         {activeMenu === 'products' && (
         <section className="animate-in fade-in slide-in-from-bottom-4">
-            <h2 className="text-2xl font-bold flex items-center gap-2 text-rose-500 mb-6">
+            <h2 className="text-2xl font-bold flex items-center gap-2 text-emerald-500 mb-6">
                 <Database className="w-6 h-6" /> جميع المنتجات (وضع المدير)
             </h2>
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
                 {products.length === 0 ? <p className="text-slate-500 col-span-full">لا توجد منتجات بالموقع.</p> : null}
                 {products.map(p => (
-                    <div key={p.id} className="bg-slate-800 rounded-xl overflow-hidden border border-rose-500/30 flex flex-col group relative">
+                    <div key={p.id} className="bg-slate-800 rounded-xl overflow-hidden border border-emerald-500/30 flex flex-col group relative">
                         <img src={(p.images && p.images.length > 0) ? p.images[0] : (p.img || 'https://via.placeholder.com/200')} className="w-full h-32 object-cover opacity-80 group-hover:opacity-100 transition" alt="prod" />
                         <div className="p-3 flex-1 flex flex-col">
                             <h3 className="font-bold text-sm text-white line-clamp-1 mb-1">{p.title}</h3>
                             <p className="text-xs text-slate-400 truncate flex-1">{p.user}</p>
-                            <button onClick={() => handleDeleteItem('products', p.id)} className="w-full mt-3 bg-rose-500 text-white text-xs py-2 rounded-md font-bold flex justify-center items-center gap-1 hover:bg-rose-600 transition">
+                            <button onClick={() => handleDeleteItem('products', p.id)} className="w-full mt-3 bg-emerald-500 text-white text-xs py-2 rounded-md font-bold flex justify-center items-center gap-1 hover:bg-emerald-600 transition">
                                 <Trash2 className="w-3 h-3" /> حذف نهائي
                             </button>
                         </div>
                     </div>
                 ))}
+            </div>
+        </section>
+        )}
+
+        {/* App Settings */}
+        {activeMenu === 'appSettings' && (
+        <section className="bg-slate-800 p-6 rounded-[20px] border border-blue-500/30 shadow-lg shadow-blue-500/5 animate-in fade-in slide-in-from-bottom-4">
+            <div className="flex justify-between items-center mb-6">
+                <div>
+                    <h2 className="text-2xl font-bold flex items-center gap-2 text-blue-500">
+                        <Settings className="w-6 h-6" /> إعدادات التطبيق
+                    </h2>
+                    <p className="text-slate-400 text-sm mt-1">تحديث رابط تحميل التطبيق للأندرويد.</p>
+                </div>
+            </div>
+            
+            <div className="grid gap-4 max-w-2xl">
+                <div className="bg-slate-700/50 p-6 rounded-xl border border-slate-600">
+                    <label className="block text-slate-300 font-bold mb-3">رابط تحميل التطبيق (APK)</label>
+                    <input 
+                        type="url" 
+                        value={appLink}
+                        onChange={(e) => setAppLink(e.target.value)}
+                        placeholder="https://..."
+                        className="w-full bg-slate-900 border border-slate-600 text-white px-4 py-3 rounded-lg focus:outline-none focus:border-blue-500 transition text-left mb-4"
+                        dir="ltr"
+                    />
+                    
+                    <div className="border-t border-slate-600 pt-4 mt-2">
+                        <label className="block text-slate-300 font-bold mb-3">أو قم برفع ملف التطبيق مباشرة</label>
+                        <input 
+                            type="file" 
+                            accept=".apk"
+                            onChange={handleApkUpload}
+                            disabled={uploadingApk}
+                            className="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-bold file:bg-blue-600 file:text-white hover:file:bg-blue-700 transition"
+                        />
+                        {uploadingApk && (
+                            <div className="mt-4">
+                                <div className="flex justify-between text-xs text-slate-400 mb-1">
+                                    <span>جاري الرفع...</span>
+                                    <span>{Math.round(apkProgress)}%</span>
+                                </div>
+                                <div className="w-full bg-slate-800 rounded-full h-2">
+                                    <div className="bg-blue-500 h-2 rounded-full transition-all duration-300" style={{ width: `${apkProgress}%` }}></div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    <p className="text-xs text-slate-400 mt-6">اترك الحقل فارغاً إذا كنت لا تريد إظهار زر تحميل التطبيق في الموقع.</p>
+                    
+                    <div className="mt-4">
+                        <button 
+                            onClick={handleSaveAppSetting} 
+                            disabled={uploadingApk}
+                            className="bg-blue-600 text-white px-6 py-2.5 rounded-lg font-bold hover:bg-blue-700 transition w-full sm:w-auto disabled:opacity-50"
+                        >
+                            حفظ الرابط
+                        </button>
+                    </div>
+                </div>
             </div>
         </section>
         )}

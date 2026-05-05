@@ -1,9 +1,9 @@
 import { Link, useNavigate } from "react-router-dom";
-import { Search, UserCircle, LogOut, ShieldCheck, Bell, Trash2, Settings } from "lucide-react";
+import { Search, UserCircle, LogOut, ShieldCheck, Bell, Trash2, Settings, Download } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useAd } from "../context/AdContext";
 import { auth, db } from "../lib/firebase";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, onSnapshot } from "firebase/firestore";
 import Swal from "sweetalert2";
 import withReactContent from "sweetalert2-react-content";
 import { signOut } from "firebase/auth";
@@ -24,8 +24,20 @@ export default function Navbar({ onSearch }: NavbarProps) {
   const [localSearch, setLocalSearch] = useState("");
   const [showNotifications, setShowNotifications] = useState(false);
   const { openAuthModal } = useAuthModal();
+  const [appLink, setAppLink] = useState('');
 
   const { init, notifications, unreadCount, loading: loadingNotifs, prefs, markAllAsRead, clearNotifications, updatePrefs } = useNotificationStore();
+
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "global_settings", "app"), (docSnap) => {
+      if (docSnap.exists()) {
+        setAppLink(docSnap.data().downloadLink || '');
+      } else {
+        setAppLink('');
+      }
+    });
+    return () => unsub();
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -106,6 +118,16 @@ export default function Navbar({ onSearch }: NavbarProps) {
       </div>
 
       <div className="flex items-center gap-3 order-2 lg:order-3">
+        {appLink && !(window.matchMedia('(display-mode: standalone)').matches || (window as any).Capacitor?.isNative) && (
+          <a
+            href={appLink}
+            className="flex items-center gap-2 bg-gradient-to-r from-accent to-orange-600 text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg font-bold hover:shadow-lg transition-all text-sm sm:text-base"
+          >
+            <Download className="w-4 h-4 sm:w-5 sm:h-5" />
+            <span className="hidden sm:inline">تحميل التطبيق</span>
+            <span className="sm:hidden">التطبيق</span>
+          </a>
+        )}
         {user ? (
           <>
             <div className="relative">
