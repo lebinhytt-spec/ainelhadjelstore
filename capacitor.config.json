@@ -1,0 +1,6 @@
+{
+  "appId": "com.ainelhadjel.store",
+  "appName": "AinElHadjelStore",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}

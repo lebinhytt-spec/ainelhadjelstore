@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Tajawal', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Poppins', 'Tajawal', ui-sans-serif, system-ui, sans-serif;
+  
+  --color-primary: #0f172a;
+  --color-accent: #ff6600;
+  --color-bg-light: #f8fafc;
+}
+
+body {
+  background-color: var(--color-bg-light);
+  background-image: radial-gradient(rgba(148, 163, 184, 0.2) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+@layer utilities {
+  .clip-path-slant {
+    clip-path: polygon(0 0, 100% 0, 100% 90%, 0% 100%);
+  }
+}
+
