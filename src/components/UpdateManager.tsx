@@ -18,8 +18,11 @@ export default function UpdateManager() {
   } | null>(null);
 
   useEffect(() => {
-    // Only check for updates if it's a native app (Android/iOS)
-    if (!Capacitor.isNativePlatform()) return;
+    // Check if it's a mobile device (Android/iOS browser or WebView) or a native Capacitor app
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || Capacitor.isNativePlatform();
+    // For testing purposes in a web browser, you can append ?test_update=true to the URL
+    const isTestMode = window.location.search.includes('test_update=true');
+    if (!isMobile && !isTestMode) return;
 
     const unsub = onSnapshot(doc(db, "global_settings", "app"), (docSnap) => {
       if (docSnap.exists()) {
@@ -46,7 +49,7 @@ export default function UpdateManager() {
   if (!showUpdate || !updateData || !updateData.downloadLink) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md" dir="rtl">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md" dir="rtl">
       <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-300">
         <div className="bg-gradient-to-r from-blue-600 to-blue-500 p-6 flex flex-col items-center justify-center text-white relative">
           {!updateData.forceUpdate && (
@@ -80,6 +83,12 @@ export default function UpdateManager() {
           <div className="flex flex-col gap-3">
             <a 
               href={updateData.downloadLink}
+              onClick={async () => {
+                try {
+                  const { increment, setDoc, doc } = await import('firebase/firestore');
+                  await setDoc(doc(db, "global_settings", "stats"), { appDownloads: increment(1) }, { merge: true });
+                } catch(e) {}
+              }}
               target="_blank"
               rel="noopener noreferrer"
               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2 transition active:scale-95 text-lg"

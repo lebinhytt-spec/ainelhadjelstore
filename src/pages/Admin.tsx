@@ -5,7 +5,7 @@ import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate, Link } from "react-router-dom";
 import Swal from "sweetalert2";
-import { ArrowRight, PlusCircle, Trash2, CheckCircle, XCircle, Crown, Database, MonitorPlay, AlertTriangle, Settings } from "lucide-react";
+import { ArrowRight, PlusCircle, Trash2, CheckCircle, XCircle, Crown, Database, MonitorPlay, AlertTriangle, Settings, Download } from "lucide-react";
 
 export default function Admin() {
   const { isAdmin, loading } = useAuth();
@@ -29,9 +29,16 @@ export default function Admin() {
   const [releaseNotes, setReleaseNotes] = useState<string>('');
   const [uploadingApk, setUploadingApk] = useState(false);
   const [apkProgress, setApkProgress] = useState(0);
+  const [downloadCount, setDownloadCount] = useState<number>(0);
 
   useEffect(() => {
     if (!isAdmin) return;
+
+    const unsubStats = onSnapshot(doc(db, "global_settings", "stats"), (docSnap) => {
+      if (docSnap.exists()) {
+        setDownloadCount(docSnap.data().appDownloads || 0);
+      }
+    });
 
     const unsubSettings = onSnapshot(doc(db, "global_settings", "app"), (docSnap) => {
       if (docSnap.exists()) {
@@ -80,6 +87,7 @@ export default function Admin() {
     });
 
     return () => {
+      unsubStats();
       unsubSettings();
       unsubAds();
       unsubVip();
@@ -331,7 +339,14 @@ export default function Admin() {
             <h2 className="text-3xl font-black flex items-center gap-2 text-white mb-8">
                 <MonitorPlay className="w-8 h-8 text-accent" /> لوحة القيادة
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+                <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl flex items-center gap-5">
+                    <div className="bg-emerald-500/10 p-4 rounded-xl text-emerald-500"><Download className="w-8 h-8" /></div>
+                    <div>
+                        <h3 className="text-slate-400 font-bold mb-1">تحميلات التطبيق</h3>
+                        <p className="text-3xl font-black text-white">{downloadCount}</p>
+                    </div>
+                </div>
                 <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl flex items-center gap-5">
                     <div className="bg-accent/10 p-4 rounded-xl text-accent"><Database className="w-8 h-8" /></div>
                     <div>

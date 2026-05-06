@@ -123,6 +123,14 @@ export default function Navbar({ onSearch }: NavbarProps) {
         {appLink && !Capacitor.isNativePlatform() && (
           <a
             href={appLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={async () => {
+              try {
+                const { increment, setDoc, doc } = await import('firebase/firestore');
+                await setDoc(doc(db, "global_settings", "stats"), { appDownloads: increment(1) }, { merge: true });
+              } catch(e) {}
+            }}
             className="flex items-center gap-2 bg-gradient-to-r from-accent to-orange-600 text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg font-bold hover:shadow-lg transition-all text-sm sm:text-base"
           >
             <Download className="w-4 h-4 sm:w-5 sm:h-5" />
