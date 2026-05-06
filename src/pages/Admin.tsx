@@ -24,6 +24,9 @@ export default function Admin() {
   const [users, setUsers] = useState<any[]>([]);
   const [activeMenu, setActiveMenu] = useState<'dashboard'|'ads'|'vip'|'reports'|'products'|'appSettings'>('dashboard');
   const [appLink, setAppLink] = useState('');
+  const [appVersionCode, setAppVersionCode] = useState<number>(1);
+  const [forceUpdate, setForceUpdate] = useState<boolean>(false);
+  const [releaseNotes, setReleaseNotes] = useState<string>('');
   const [uploadingApk, setUploadingApk] = useState(false);
   const [apkProgress, setApkProgress] = useState(0);
 
@@ -32,7 +35,11 @@ export default function Admin() {
 
     const unsubSettings = onSnapshot(doc(db, "global_settings", "app"), (docSnap) => {
       if (docSnap.exists()) {
-        setAppLink(docSnap.data().downloadLink || '');
+        const data = docSnap.data();
+        setAppLink(data.downloadLink || '');
+        setAppVersionCode(data.versionCode || 1);
+        setForceUpdate(data.forceUpdate || false);
+        setReleaseNotes(data.releaseNotes || '');
       }
     });
 
@@ -210,8 +217,13 @@ export default function Admin() {
 
   const handleSaveAppSetting = async () => {
     try {
-      await setDoc(doc(db, "global_settings", "app"), { downloadLink: appLink }, { merge: true });
-      Swal.fire('نجاح', 'تم حفظ رابط التطبيق بنجاح', 'success');
+      await setDoc(doc(db, "global_settings", "app"), { 
+          downloadLink: appLink,
+          versionCode: Number(appVersionCode),
+          forceUpdate,
+          releaseNotes
+      }, { merge: true });
+      Swal.fire('نجاح', 'تم حفظ الإعدادات بنجاح', 'success');
     } catch (error) {
       console.error(error);
       Swal.fire('خطأ', 'حدث خطأ أثناء حفظ الإعدادات', 'error');
@@ -401,15 +413,15 @@ export default function Admin() {
                 </button>
             </div>
             
-            <div className="grid gap-4">
+            <div className="grid gap-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
                 {ads.length === 0 ? <p className="text-slate-500 text-center py-4">لا توجد إعلانات مسجلة.</p> : null}
                 {ads.map(ad => (
                     <div key={ad.id} className="bg-slate-700/50 p-4 rounded-xl flex justify-between items-center border border-slate-600">
                         <div>
                             <strong className="text-amber-400 text-lg block">{ad.note}</strong>
-                            <span className="text-slate-400 text-sm bg-slate-800 px-2 py-1 rounded-md mt-1 inline-block">المكان: {ad.position === 'top' ? 'أعلىال صفحة' : ad.position === 'bottom' ? 'أسفل الصفحة' : 'وسط المنتجات'}</span>
+                            <span className="text-slate-400 text-sm bg-slate-800 px-2 py-1 rounded-md mt-1 inline-block">المكان: {ad.position === 'top' ? 'أعلى الصفحة' : ad.position === 'bottom' ? 'أسفل الصفحة' : 'وسط المنتجات'}</span>
                         </div>
-                        <button onClick={() => handleDeleteItem('global_ads', ad.id)} className="p-3 bg-rose-500/20 text-rose-400 rounded-lg hover:bg-rose-500 hover:text-white transition">
+                        <button onClick={() => handleDeleteItem('global_ads', ad.id)} className="p-3 bg-rose-500/20 text-rose-400 rounded-lg hover:bg-rose-500 hover:text-white transition shadow-sm">
                             <Trash2 className="w-5 h-5" />
                         </button>
                     </div>
@@ -547,6 +559,47 @@ export default function Admin() {
                                 </div>
                             </div>
                         )}
+                    </div>
+
+                    <div className="border-t border-slate-600 pt-4 mt-6">
+                        <h3 className="text-xl font-bold text-white mb-4">إعدادات التحديث الإجباري</h3>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-slate-300 font-bold mb-2">رقم الإصدار (Version Code)</label>
+                                <input 
+                                    type="number" 
+                                    value={appVersionCode}
+                                    onChange={(e) => setAppVersionCode(Number(e.target.value))}
+                                    className="w-full bg-slate-900 border border-slate-600 text-white px-4 py-3 rounded-lg focus:outline-none focus:border-emerald-500 transition text-left"
+                                    dir="ltr"
+                                />
+                                <p className="text-xs text-slate-400 mt-1">تحديد رقم الإصدار الأحدث من التطبيق. المستخدمن الذين يملكون رقم إصدار أقل ستصلهم رسالة تحديث.</p>
+                            </div>
+                            
+                            <div>
+                                <label className="block text-slate-300 font-bold mb-2">ملاحظات الإصدار الجديد</label>
+                                <textarea 
+                                    value={releaseNotes}
+                                    onChange={(e) => setReleaseNotes(e.target.value)}
+                                    placeholder="- إضافة ميزات جديدة
+- تحسين واجهة المستخدم"
+                                    className="w-full bg-slate-900 border border-slate-600 text-white px-4 py-3 rounded-lg focus:outline-none focus:border-emerald-500 transition resize-y min-h-[100px]"
+                                />
+                            </div>
+
+                            <label className="flex items-center gap-3 cursor-pointer mt-2 bg-slate-900 p-4 rounded-xl border border-slate-600">
+                                <input 
+                                    type="checkbox" 
+                                    checked={forceUpdate}
+                                    onChange={(e) => setForceUpdate(e.target.checked)}
+                                    className="w-5 h-5 accent-emerald-500 cursor-pointer"
+                                />
+                                <div>
+                                    <span className="text-white font-bold block">إجبار المشتخدم على التحديث</span>
+                                    <span className="text-xs text-slate-400">إذا تم تفعيل هذا الخيار، لن يتمكن المستخدم من إغلاق نافذة التحديث في الإصدارات القديمة.</span>
+                                </div>
+                            </label>
+                        </div>
                     </div>
 
                     <p className="text-xs text-slate-400 mt-6">اترك الحقل فارغاً إذا كنت لا تريد إظهار زر تحميل التطبيق في الموقع.</p>

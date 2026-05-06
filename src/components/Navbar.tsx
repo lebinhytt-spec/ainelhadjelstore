@@ -96,8 +96,9 @@ export default function Navbar({ onSearch }: NavbarProps) {
   return (
     <nav className="bg-white/80 backdrop-blur-xl sticky top-0 z-50 shadow-[0_4px_30px_rgba(0,0,0,0.05)] border-b border-white/20 px-4 md:px-8 py-3 flex flex-wrap lg:flex-nowrap justify-between items-center gap-4 transition-all duration-300">
       <Link to="/" className="flex items-center gap-3 no-underline group order-1">
-        <h1 className="font-display font-black text-xl md:text-2xl text-primary m-0 tracking-tight transition-transform group-hover:scale-105">
-          Aïn El Hadjel <span className="text-accent bg-accent/10 px-2 py-0.5 rounded-lg ml-1">Store</span>
+        <h1 className="font-display font-black text-xl md:text-2xl text-slate-800 m-0 tracking-tight transition-transform flex flex-col items-center leading-none">
+          <span className="text-blue-600">Ain El Hadjel</span>
+          <span className="text-accent tracking-widest text-sm">— STORE —</span>
         </h1>
       </Link>
 

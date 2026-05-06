@@ -6,6 +6,7 @@ import Home from "./pages/Home";
 import Admin from "./pages/Admin";
 import About from "./pages/About";
 import { App as CapApp } from "@capacitor/app";
+import UpdateManager from "./components/UpdateManager";
 
 function DeepLinkHandler({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
@@ -33,6 +34,7 @@ export default function App() {
       <AdProvider>
         <BrowserRouter>
           <DeepLinkHandler>
+            <UpdateManager />
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/admin" element={<Admin />} />

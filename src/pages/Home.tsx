@@ -12,7 +12,7 @@ import Footer from "../components/Footer";
 import SellerReviews from "../components/SellerReviews";
 import ProductComments from "../components/ProductComments";
 import TopProgressBar from "../components/TopProgressBar";
-import { Filter, Store, PhoneCall, Trash2, Crown, X, Flag, Heart, Share2, ArrowUp } from "lucide-react";
+import { Filter, Store, PhoneCall, Trash2, Crown, X, Flag, Heart, Share2, ArrowUp, ShoppingBag, Grid, Home as HomeIcon, LayoutGrid, Smartphone, Wrench, Shirt, Gem, Package, Car, Building2, User, FileText, Camera } from "lucide-react";
 import Swal from "sweetalert2";
 
 export default function Home() {
@@ -29,16 +29,31 @@ export default function Home() {
 
   useEffect(() => {
     const unsubscribeAds = onSnapshot(query(collection(db, "global_ads"), orderBy("date", "desc")), (snap) => {
-      const topAds: any[] = [];
-      const bottomAds: any[] = [];
-      const inFeedAds: any[] = [];
+      let topAds: any[] = [];
+      let bottomAds: any[] = [];
+      let inFeedAds: any[] = [];
       snap.forEach(doc => {
         const ad = { id: doc.id, ...doc.data() } as any;
         if (ad.position === "top") topAds.push(ad);
         else if (ad.position === "bottom") bottomAds.push(ad);
         else if (ad.position === "in_feed") inFeedAds.push(ad);
       });
-      setAds({ top: topAds, bottom: bottomAds, inFeed: inFeedAds });
+      // Shuffle array utility
+      const shuffle = (array: any[]) => {
+        let currentIndex = array.length, randomIndex;
+        while (currentIndex !== 0) {
+          randomIndex = Math.floor(Math.random() * currentIndex);
+          currentIndex--;
+          [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+        }
+        return array;
+      };
+      
+      setAds({ 
+        top: shuffle(topAds), 
+        bottom: shuffle(bottomAds), 
+        inFeed: shuffle(inFeedAds) 
+      });
     });
 
     const unsubscribeProducts = onSnapshot(query(collection(db, "products"), orderBy("date", "desc")), (snap) => {
@@ -311,47 +326,55 @@ export default function Home() {
                 <div className="w-full aspect-[4/3] bg-slate-100 overflow-hidden relative">
                     <img 
                         src={thumbnail} 
-                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" 
+                        className="w-full h-full object-cover transition-all duration-700 group-hover:scale-110" 
                         alt={d.title}
                         onError={(e) => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/600x450?text=صورة+غير+متاحة'; }}
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-transparent to-transparent opacity-60 group-hover:opacity-80 transition-opacity duration-500"></div>
-                </div>
-                <div className="p-3 sm:p-5 flex flex-col flex-1 gap-1.5 relative">
-                    {d.category && <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md w-fit mb-1">{d.category}</span>}
-                    <h3 className={`font-bold text-sm sm:text-base leading-snug line-clamp-2 m-0 group-hover:text-accent transition-colors ${d.isOffer ? 'text-rose-900' : 'text-slate-800'}`}>
-                        {d.title}
-                    </h3>
-
-                    <div className="flex items-center gap-2 mt-1">
-                        <div className="flex items-center gap-0.5 text-amber-400">
-                            <span className="text-xs font-bold text-slate-700">{rating}</span>
-                            <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
-                        </div>
-                        <span className="text-xs text-slate-400">|</span>
-                        <span className="text-xs text-slate-500 font-medium">تم بيع {soldCount}+</span>
-                    </div>
-
-                    <div className="mt-2">
-                        <p className="font-black text-xl sm:text-2xl ltr m-0 text-left text-accent" dir="ltr">{d.price} <span className="text-xs font-bold text-slate-500">دج</span></p>
-                    </div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/20 to-transparent opacity-80 transition-opacity duration-500"></div>
                     
-                    <div className="flex justify-between items-center pt-3 mt-auto">
-                        <span className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-slate-500 font-medium">
-                            <Store className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400" /> <span className="truncate max-w-[80px] sm:max-w-[100px]">{d.user.split('@')[0]}</span>
-                        </span>
+                    <div className="absolute bottom-3 right-3 left-3 flex justify-between items-end">
+                        <div className="bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-xl shadow-lg border border-white/50">
+                            <p className="font-black text-lg sm:text-xl ltr text-accent" dir="ltr">{d.price} <span className="text-xs font-bold text-slate-500">دج</span></p>
+                        </div>
                         <span 
                             onClick={(e) => handleLike(d.id, e)}
-                            className="relative flex items-center gap-1 sm:gap-1.5 font-bold text-slate-400 hover:text-rose-500 transition-colors cursor-pointer p-1 active:scale-95 z-20 bg-slate-50 rounded-full px-2"
+                            className="relative flex items-center justify-center w-10 h-10 bg-white/90 backdrop-blur-md hover:bg-rose-50 rounded-full shadow-lg border border-white/50 transition-all cursor-pointer hover:scale-110 active:scale-95 z-20 group/heart"
                         >
-                            <Heart className={`w-4 h-4 transition-transform duration-300 ${likesCount > 0 ? 'fill-rose-500 text-rose-500' : ''} ${animatedHeartId === d.id ? 'scale-150 rotate-12' : ''}`} /> <span className="text-xs">{likesCount}</span>
+                            <Heart className={`w-5 h-5 transition-transform duration-300 ${likesCount > 0 ? 'fill-rose-500 text-rose-500' : 'text-slate-400 group-hover/heart:text-rose-400'} ${animatedHeartId === d.id ? 'scale-150 rotate-12' : ''}`} />
+                            {animatedHeartId === d.id && (
+                                <span className="absolute -top-10 bg-rose-500 text-white text-xs px-2 py-1 rounded-full shadow-lg animate-bounce whitespace-nowrap z-30 pointer-events-none">
+                                    ❤️
+                                </span>
+                            )}
                         </span>
                     </div>
-                    {animatedHeartId === d.id && (
-                        <span className="absolute -top-8 right-0 bg-rose-500 text-white text-xs px-2 py-1 rounded-full shadow-lg animate-bounce whitespace-nowrap z-30">
-                            تم الإعجاب ❤️
+                </div>
+                
+                <div className="p-4 sm:p-5 flex flex-col flex-1 gap-2 bg-white">
+                    <div className="flex justify-between items-start gap-2">
+                        {d.category && <span className="text-[10px] sm:text-xs font-bold text-accent bg-accent/10 px-2.5 py-1 rounded-lg w-fit">{d.category}</span>}
+                        <div className="flex items-center gap-1 bg-amber-50 px-2 py-1 rounded-lg">
+                            <svg className="w-3.5 h-3.5 fill-amber-400 text-amber-400" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+                            <span className="text-xs font-bold text-amber-600">{rating}</span>
+                        </div>
+                    </div>
+                    
+                    <h3 className={`font-black text-sm sm:text-base leading-snug line-clamp-2 mt-1 transition-colors ${d.isOffer ? 'text-rose-600' : 'text-slate-800'}`}>
+                        {d.title}
+                    </h3>
+                    
+                    <div className="pt-3 mt-auto border-t border-slate-100 flex items-center justify-between">
+                        <span className="flex items-center gap-2 text-xs sm:text-sm text-slate-500 font-medium">
+                            <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center">
+                                <User className="w-3.5 h-3.5 text-slate-400" />
+                            </div>
+                            <span className="truncate max-w-[120px]">{d.user.split('@')[0]}</span>
                         </span>
-                    )}
+                        
+                        <span className="text-xs font-bold text-accent group-hover:underline underline-offset-4 decoration-accent/30 pointer-events-none">
+                            عرض التفاصيل &larr;
+                        </span>
+                    </div>
                 </div>
             </div>
         );
@@ -376,32 +399,108 @@ export default function Home() {
 
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 md:px-8 py-8 space-y-12">
         
-        {/* Hero Section */}
+        {/* Hero Banner Section */}
         {!searchTerm && activeTab === "all" && (
-            <div className="relative rounded-[32px] overflow-hidden bg-slate-900 shadow-2xl">
-                <div className="absolute inset-0 bg-gradient-to-r from-accent/90 to-primary/95 z-10 mix-blend-multiply"></div>
-                <img src="https://images.unsplash.com/photo-1555529733-0e670560f8e1?q=80&w=2000&auto=format&fit=crop" className="absolute inset-0 w-full h-full object-cover" alt="Hero Background" />
-                
-                <div className="relative z-20 px-8 py-20 md:py-32 text-center flex flex-col items-center">
-                    <h1 className="text-4xl md:text-6xl lg:text-7xl font-black text-white mb-6 tracking-tight leading-tight drop-shadow-lg">
-                        دليلك الذكي في <span className="text-amber-400 bg-clip-text">عين الحجل</span>
-                    </h1>
-                    <p className="text-lg md:text-xl text-slate-200 max-w-2xl mb-10 font-medium leading-relaxed">
-                        اكتشف أفضل العروض على السيارات، العقارات، الأجهزة، والمزيد. منصة عصرية بلمسة أحترافية لبيع و شراء كل ما تحتاجه بكل يسر.
+            <div className="relative rounded-3xl overflow-hidden bg-slate-900 shadow-2xl flex flex-col md:flex-row items-center border border-slate-700/50">
+                {/* Background effects */}
+                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20 z-0"></div>
+                <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-l from-slate-900 via-slate-800 to-slate-900 z-0"></div>
+                <div className="absolute -top-24 -right-24 w-96 h-96 bg-accent/20 blur-3xl rounded-full z-0 pointer-events-none"></div>
+                <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-500/20 blur-3xl rounded-full z-0 pointer-events-none"></div>
+
+                <div className="relative z-20 flex-1 p-6 sm:p-8 md:p-12 text-center md:text-right flex flex-col justify-center w-full">
+                    <div className="inline-flex items-center justify-center md:justify-start gap-2 mb-3 sm:mb-4">
+                        <ShoppingBag className="w-8 h-8 sm:w-10 sm:h-10 text-accent" />
+                        <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight">
+                            Ain El Hadjel <span className="text-accent">STORE</span>
+                        </h1>
+                    </div>
+                    
+                    <h2 className="text-3xl sm:text-4xl md:text-6xl font-black text-white mb-4 leading-tight drop-shadow-md">
+                        أول متجر إلكتروني <br/>
+                        <span className="bg-accent text-white px-3 sm:px-4 py-1 rounded-xl text-3xl sm:text-4xl md:text-6xl mt-2 inline-block shadow-lg shadow-accent/30">في عين الحجل</span>
+                    </h2>
+                    
+                    <p className="text-base sm:text-lg md:text-xl text-slate-300 font-medium mb-6 sm:mb-8 max-w-lg mx-auto md:mx-0">
+                        منتجات متنوعة وخدمات محلية من أهل بلدنا. تسوق بكل سهولة وأمان وادعم الاقتصاد المحلي.
                     </p>
-                    <div className="flex flex-wrap justify-center gap-4">
-                        <button className="bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-900 px-10 py-5 rounded-2xl font-black text-lg transition-all hover:-translate-y-1 shadow-xl shadow-amber-400/30 flex items-center gap-2">
-                            استكشف العروض الآن
+
+                    <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-6 sm:mb-8 w-full">
+                        <div className="bg-slate-800/80 backdrop-blur-sm border border-slate-700 p-2 sm:p-4 rounded-2xl flex flex-col items-center justify-center text-center">
+                            <Store className="w-6 h-6 sm:w-8 sm:h-8 text-blue-400 mb-1.5 sm:mb-2" />
+                            <h3 className="text-white font-bold text-[10px] sm:text-sm">خدمات محلية</h3>
+                            <p className="text-slate-400 text-[9px] sm:text-xs mt-1 hidden sm:block">كل ما تحتاجه من مكان واحد</p>
+                        </div>
+                        <div className="bg-slate-800/80 backdrop-blur-sm border border-slate-700 p-2 sm:p-4 rounded-2xl flex flex-col items-center justify-center text-center">
+                            <Gem className="w-6 h-6 sm:w-8 sm:h-8 text-orange-400 mb-1.5 sm:mb-2" />
+                            <h3 className="text-white font-bold text-[10px] sm:text-sm">جودة موثوقة</h3>
+                            <p className="text-slate-400 text-[9px] sm:text-xs mt-1 hidden sm:block">من محليين تثق بهم</p>
+                        </div>
+                        <div className="bg-slate-800/80 backdrop-blur-sm border border-slate-700 p-2 sm:p-4 rounded-2xl flex flex-col items-center justify-center text-center">
+                            <ShoppingBag className="w-6 h-6 sm:w-8 sm:h-8 text-indigo-400 mb-1.5 sm:mb-2" />
+                            <h3 className="text-white font-bold text-[10px] sm:text-sm">تسوق بسهولة</h3>
+                            <p className="text-slate-400 text-[9px] sm:text-xs mt-1 hidden sm:block">منتجات متنوعة بأسعار مناسبة</p>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-wrap justify-center md:justify-start gap-4">
+                        <button 
+                            onClick={() => { document.getElementById('filters-btn')?.scrollIntoView({ behavior: 'smooth' }) }}
+                            className="bg-gradient-to-r from-accent to-orange-500 text-white px-6 sm:px-8 py-3.5 sm:py-4 rounded-xl font-black text-base sm:text-lg transition-all hover:scale-105 shadow-xl shadow-accent/30 flex items-center justify-center gap-2 w-full sm:w-auto"
+                        >
+                            <ShoppingBag className="w-5 h-5 sm:w-6 sm:h-6" />
+                            تسوق الآن وادعم اقتصادنا
                         </button>
                     </div>
                 </div>
             </div>
         )}
 
+        {/* Categories Quick Links */}
+        {!searchTerm && activeTab === "all" && (
+            <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm border border-slate-100 mb-8 overflow-hidden w-full">
+                <div className="flex justify-between items-center mb-4 sm:mb-6">
+                    <h3 className="text-lg sm:text-xl font-bold text-slate-800 flex items-center gap-2">
+                        <LayoutGrid className="w-5 h-5 sm:w-6 sm:h-6 text-accent" /> الأقسام
+                    </h3>
+                    <button onClick={() => { document.getElementById('filters-btn')?.click() }} className="text-xs sm:text-sm font-bold text-slate-500 hover:text-accent whitespace-nowrap">
+                        عرض الكل
+                    </button>
+                </div>
+                <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 sm:gap-6">
+                    {[
+                        { label: 'سيارات', icon: Car, color: 'bg-blue-100 text-blue-600', val: 'سيارات' },
+                        { label: 'عقارات', icon: Building2, color: 'bg-emerald-100 text-emerald-600', val: 'عقارات' },
+                        { label: 'هواتف', icon: Smartphone, color: 'bg-indigo-100 text-indigo-600', val: 'أجهزة إلكترونية' },
+                        { label: 'خدمات', icon: Wrench, color: 'bg-amber-100 text-amber-600', val: 'خدمات' },
+                        { label: 'ملابس', icon: Shirt, color: 'bg-rose-100 text-rose-600', val: 'ملابس' },
+                        { label: 'وظائف', icon: FileText, color: 'bg-cyan-100 text-cyan-600', val: 'أخرى' },
+                        { label: 'المزيد', icon: LayoutGrid, color: 'bg-slate-100 text-slate-600', val: 'الكل' },
+                    ].map((cat, i) => (
+                        <button 
+                            key={i} 
+                            onClick={async () => {
+                                setIsFiltersOpen(true);
+                                setSelectedCategory(cat.val);
+                                // ensure filter is displayed
+                                setTimeout(() => window.scrollTo({ top: 500, behavior: 'smooth'}), 100);
+                            }}
+                            className="flex flex-col items-center gap-1.5 sm:gap-2 group transition-transform active:scale-95"
+                        >
+                            <div className={`w-12 h-12 sm:w-16 sm:h-16 rounded-[14px] sm:rounded-2xl flex items-center justify-center transition-all duration-300 group-hover:-translate-y-1 group-hover:shadow-md ${cat.color}`}>
+                                <cat.icon className="w-5 h-5 sm:w-8 sm:h-8" />
+                            </div>
+                            <span className="text-[10px] sm:text-sm font-bold text-slate-600 group-hover:text-slate-900 whitespace-nowrap overflow-hidden text-ellipsis w-full text-center px-0.5">{cat.label}</span>
+                        </button>
+                    ))}
+                </div>
+            </div>
+        )}
+
         {/* Top Ads */}
         {ads.top.length > 0 && activeTab === "all" && (
-          <div className="max-w-4xl mx-auto mb-8 space-y-4">
-            {ads.top.map((ad, i) => <AdsContainer key={i} code={ad.code} />)}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-8">
+            {ads.top.slice(0, 12).map((ad, i) => <AdsContainer key={i} code={ad.code} />)}
           </div>
         )}
 
@@ -429,6 +528,7 @@ export default function Home() {
             </div>
             
             <button 
+              id="filters-btn"
               onClick={() => setIsFiltersOpen(!isFiltersOpen)}
               className={`flex items-center justify-center gap-2 font-bold px-5 py-2.5 rounded-xl transition-all sm:ml-auto w-full sm:w-fit ${isFiltersOpen ? 'bg-accent text-white shadow-lg shadow-accent/20' : 'bg-white text-slate-600 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 hover:text-accent shadow-sm'}`}
             >
@@ -518,8 +618,8 @@ export default function Home() {
 
         {/* Bottom Ads */}
         {ads.bottom.length > 0 && activeTab === "all" && (
-          <div className="max-w-4xl mx-auto mt-12 space-y-4">
-            {ads.bottom.map((ad, i) => <AdsContainer key={i} code={ad.code} />)}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-12">
+            {ads.bottom.slice(0, 12).map((ad, i) => <AdsContainer key={i} code={ad.code} />)}
           </div>
         )}
 
@@ -533,11 +633,19 @@ export default function Home() {
       {selectedProduct && (
         <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-0 sm:p-4">
             <div 
-                className="bg-white w-full h-full sm:h-auto sm:max-w-4xl sm:max-h-[90vh] sm:rounded-3xl shadow-2xl overflow-y-auto relative p-6 sm:p-10 animate-in slide-in-from-bottom-10 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300"
+                className="bg-white w-full h-full sm:h-auto sm:max-w-4xl sm:max-h-[90vh] sm:rounded-3xl shadow-2xl overflow-y-auto relative p-4 sm:p-10 animate-in slide-in-from-bottom-10 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-300"
             >
+                <div className="sticky top-0 right-0 z-30 flex justify-end pb-2 sm:hidden bg-white/90 backdrop-blur-md -mx-4 -mt-4 px-4 pt-4 shadow-sm mb-4">
+                     <button 
+                         onClick={() => setSelectedProduct(null)}
+                         className="bg-slate-100 p-2 rounded-full text-slate-800 focus:outline-none focus:ring-2 focus:ring-accent"
+                     >
+                         <X className="w-6 h-6" />
+                     </button>
+                </div>
                 <button 
                     onClick={() => setSelectedProduct(null)}
-                    className="absolute top-4 right-4 bg-white/80 backdrop-blur-sm p-2 rounded-full text-slate-600 hover:bg-rose-500 hover:text-white transition z-20 shadow-sm"
+                    className="hidden sm:block absolute top-4 right-4 bg-white/80 backdrop-blur-sm p-2 rounded-full text-slate-600 hover:bg-rose-500 hover:text-white transition z-20 shadow-sm"
                 >
                     <X className="w-6 h-6" />
                 </button>
@@ -549,29 +657,31 @@ export default function Home() {
                 />
 
                 {selectedProduct.video && (
-                    <iframe src={selectedProduct.video} className="w-full h-[300px] rounded-xl border-none mb-4" title="Video" />
+                    <iframe src={selectedProduct.video} className="w-full h-[300px] sm:h-[400px] lg:h-[450px] rounded-xl border-none mb-4" title="Video" />
                 )}
 
-                <div className="flex justify-between items-start mt-2">
-                    <h2 className="text-2xl font-bold text-slate-900">{selectedProduct.title}</h2>
+                <div className="flex flex-col sm:flex-row justify-between items-start mt-2 gap-4">
+                    <h2 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 leading-tight">{selectedProduct.title}</h2>
                     {selectedProduct.shortCode && (
-                        <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-md">
-                            كود: {selectedProduct.shortCode}
-                        </span>
+                        <div className="flex gap-2 shrink-0">
+                            <span className="text-[10px] sm:text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-md whitespace-nowrap">
+                                كود: {selectedProduct.shortCode}
+                            </span>
+                        </div>
                     )}
                 </div>
-                <h3 className="text-4xl sm:text-5xl font-black bg-gradient-to-r from-accent to-orange-300 text-transparent bg-clip-text mt-2" dir="ltr">{selectedProduct.price} <span className="text-2xl font-bold text-accent drop-shadow-none">دج</span></h3>
+                <h3 className="text-3xl sm:text-4xl md:text-5xl font-black bg-gradient-to-r from-accent to-orange-300 text-transparent bg-clip-text mt-3" dir="ltr">{selectedProduct.price} <span className="text-xl sm:text-2xl font-bold text-accent drop-shadow-none">دج</span></h3>
                 
-                <p className="bg-slate-50 p-4 rounded-xl mt-4 text-slate-700 leading-relaxed whitespace-pre-wrap border border-slate-100">
+                <p className="bg-slate-50 p-4 sm:p-5 rounded-xl sm:rounded-2xl mt-4 text-sm sm:text-base text-slate-700 leading-relaxed whitespace-pre-wrap border border-slate-100">
                     {selectedProduct.desc}
                 </p>
 
                 <a 
                     href={`tel:${selectedProduct.phone}`} 
-                    className="block w-full bg-emerald-500 text-white text-center py-4 rounded-xl text-xl font-black mt-6 hover:bg-emerald-600 hover:-translate-y-1 transition shadow-lg shadow-emerald-500/30 flex items-center justify-center gap-2"
+                    className="flex w-full bg-emerald-500 text-white justify-center py-3.5 sm:py-4 rounded-xl text-lg sm:text-xl font-black mt-6 hover:bg-emerald-600 hover:-translate-y-1 transition shadow-lg shadow-emerald-500/30 items-center gap-2"
                 >
-                    <PhoneCall className="w-6 h-6" />
-                    إتصل بالبائع ({selectedProduct.phone})
+                    <PhoneCall className="w-5 h-5 sm:w-6 sm:h-6" />
+                    <span>إتصل بالبائع ({selectedProduct.phone})</span>
                 </a>
 
                 <div className="flex flex-wrap sm:flex-nowrap gap-3 mt-4">
