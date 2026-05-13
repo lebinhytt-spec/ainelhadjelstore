@@ -15,10 +15,11 @@ export default function ProductComments({ productId, productOwner }: { productId
 
     useEffect(() => {
         if (!productId) return;
-        const q = query(collection(db, `products/${productId}/comments`), orderBy("date", "asc"));
+        const q = collection(db, `products/${productId}/comments`);
         const unsub = onSnapshot(q, (snap) => {
             const data: any[] = [];
             snap.forEach(d => data.push({ id: d.id, ...d.data() }));
+            data.sort((a, b) => (a.date || 0) - (b.date || 0));
             setComments(data);
             setLoading(false);
         });

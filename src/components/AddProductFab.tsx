@@ -1,293 +1,303 @@
-import { Plus } from "lucide-react";
+import React, { useState, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useAd } from "../context/AdContext";
 import Swal from "sweetalert2";
 import { addDoc, collection } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { db, storage } from "../lib/firebase";
-
-const compressImage = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
-      const img = new Image();
-      img.src = event.target?.result as string;
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 800;
-        const MAX_HEIGHT = 800;
-        let width = img.width;
-        let height = img.height;
-
-        if (width > height) {
-          if (width > MAX_WIDTH) {
-            height *= MAX_WIDTH / width;
-            width = MAX_WIDTH;
-          }
-        } else {
-          if (height > MAX_HEIGHT) {
-            width *= MAX_HEIGHT / height;
-            height = MAX_HEIGHT;
-          }
-        }
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-            ctx.drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL('image/webp', 0.6));
-        } else {
-            resolve(img.src);
-        }
-      };
-      img.onerror = (error) => reject(error);
-    };
-    reader.onerror = (error) => reject(error);
-  });
-};
-
-const compressVideo = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const video = document.createElement('video');
-    video.src = URL.createObjectURL(file);
-    video.muted = true;
-    video.playsInline = true;
-    
-    video.onloadedmetadata = () => {
-      const canvas = document.createElement('canvas');
-      const MAX_WIDTH = 320;
-      let width = video.videoWidth;
-      let height = video.videoHeight;
-      if (width > MAX_WIDTH) {
-        height = Math.round(height * MAX_WIDTH / width);
-        width = MAX_WIDTH;
-      }
-      canvas.width = width;
-      canvas.height = height;
-      
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return reject('No canvas context');
-
-      video.currentTime = 0;
-      video.play().catch(reject);
-
-      let stream;
-      try {
-          stream = canvas.captureStream(15);
-      } catch (e) {
-          return reject('captureStream unsupported');
-      }
-
-      let mimeType = 'video/webm;codecs=vp8';
-      let options = { mimeType, videoBitsPerSecond: 150000 };
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-          mimeType = 'video/webm';
-          options = { mimeType, videoBitsPerSecond: 150000 };
-      }
-      if (!MediaRecorder.isTypeSupported(mimeType)) {
-          options = { mimeType: '', videoBitsPerSecond: 150000 };
-      }
-
-      const recorder = new MediaRecorder(stream, options);
-      const chunks: Blob[] = [];
-
-      recorder.ondataavailable = e => {
-        if (e.data.size > 0) chunks.push(e.data);
-      };
-
-      recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: options.mimeType || 'video/webm' });
-        const reader = new FileReader();
-        reader.readAsDataURL(blob);
-        reader.onloadend = () => {
-          resolve(reader.result as string);
-        };
-      };
-
-      recorder.start();
-
-      const draw = () => {
-        // Limit to 5 seconds to ensure very small filesize (fits within Firestore limits)
-        if (video.paused || video.ended || video.currentTime > 5) {
-          recorder.stop();
-          video.pause();
-          URL.revokeObjectURL(video.src);
-          return;
-        }
-        ctx.drawImage(video, 0, 0, width, height);
-        requestAnimationFrame(draw);
-      };
-
-      video.onplay = () => draw();
-    };
-    video.onerror = () => reject('Error playing video');
-  });
-};
+import { Plus, Camera, Image as ImageIcon, Wand2, MapPin, Loader2, Sparkles } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import imageCompression from "browser-image-compression";
+import { analyzeProductImage, suggestPrice } from "../services/aiService";
 
 export default function AddProductFab() {
   const { user } = useAuth();
-  const { withAd } = useAd();
+  const [isOpen, setIsOpen] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [priceAdvice, setPriceAdvice] = useState<string | null>(null);
+  const [previewImages, setPreviewImages] = useState<string[]>([]);
+  const [files, setFiles] = useState<File[]>([]);
+  
+  const [form, setForm] = useState({
+    title: "",
+    price: "",
+    category: "",
+    description: "",
+    location: "كل الولايات",
+    phone: "",
+    condition: "new" as "new" | "used"
+  });
 
-  const handlePublish = async () => {
-    if (!user) {
-      Swal.fire("تنبيه", "سجل دخولك لتتمكن من البيع", "warning");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const newFiles = Array.from(e.target.files);
+      setFiles([...files, ...newFiles]);
+      
+      newFiles.forEach((file: File) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setPreviewImages(prev => [...prev, reader.result as string]);
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  };
+
+  const runAIAnalysis = async () => {
+    if (previewImages.length === 0) {
+      Swal.fire("تنبيه", "يرجى رفع صورة أولاً ليقوم الذكاء الاصطناعي بتحليلها", "warning");
       return;
     }
 
-      const startPublish = async () => {
-        let defaultPhone = '';
-        try {
-            if (user.email) {
-                const { getDoc, doc } = await import("firebase/firestore");
-                const uDoc = await getDoc(doc(db, "users", user.email));
-                if (uDoc.exists()) {
-                    defaultPhone = uDoc.data().phone || '';
-                }
-            }
-        } catch(e) {}
+    setIsAnalyzing(true);
+    try {
+      const result = await analyzeProductImage(previewImages[0]);
+      if (result) {
+        setForm(prev => ({
+          ...prev,
+          title: result.title || prev.title,
+          description: result.description || prev.description,
+          category: result.category || prev.category
+        }));
+        setPriceAdvice(`اقتراح الذكاء الاصطناعي: حالة المنتج تبدو ${result.priceStatus === 'Great' ? 'ممتازة' : 'جيدة'}`);
+        Swal.fire({
+            title: "تم التحليل!",
+            text: "قام الذكاء الاصطناعي بكتابة الوصف وتحديد الفئة تلقائياً.",
+            icon: "success",
+            toast: true,
+            position: "top-end",
+            showConfirmButton: false,
+            timer: 3000
+        });
+      }
+    } catch (e) {
+      console.error(e);
+      Swal.fire("خطأ", "فشل تحليل الصورة بالذكاء الاصطناعي", "error");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
-        const { value: form, isConfirmed } = await Swal.fire({
-          title: 'إضافة منتج للسوق',
-          html: `
-            <div class="flex flex-col gap-3 text-right" dir="rtl">
-              <input id="p-title" class="w-full p-3 border border-slate-300 rounded-lg focus:outline-none focus:border-accent text-right" placeholder="اسم المنتج">
-              <div class="flex gap-2 mb-3">
-                <input id="p-price" type="number" class="w-full p-3 border border-slate-300 rounded-lg focus:outline-none focus:border-accent text-right" placeholder="السعر (دج)">
-                <select id="p-category" class="w-full p-3 border border-slate-300 rounded-lg focus:outline-none focus:border-accent text-right bg-white appearance-none">
-                  <option value="عقارات">عقارات</option>
-                  <option value="سيارات">سيارات</option>
-                  <option value="أجهزة إلكترونية">أجهزة إلكترونية</option>
-                  <option value="خدمات">خدمات</option>
-                  <option value="ملابس">ملابس</option>
-                  <option value="أخرى" selected>أخرى</option>
-                </select>
-              </div>
-              <select id="p-condition" class="w-full p-3 border border-slate-300 rounded-lg focus:outline-none focus:border-accent text-right bg-white mb-3">
-                  <option value="جديد">جديد</option>
-                  <option value="مستعمل">مستعمل</option>
-              </select>
-              <input id="p-phone" type="tel" value="${defaultPhone}" class="w-full p-3 border border-slate-300 rounded-lg focus:outline-none focus:border-accent text-right" placeholder="رقم الهاتف">
-              <textarea id="p-desc" class="w-full p-3 border border-slate-300 rounded-lg focus:outline-none focus:border-accent text-right min-h-[100px]" placeholder="الوصف"></textarea>
-              <div class="text-right border border-slate-300 rounded-lg p-3 bg-slate-50">
-                  <label class="block text-sm font-bold text-slate-700 mb-2">صور المنتج (حد أقصى 4 صور وفيديوهات)</label>
-                  <input type="file" id="p-images-file" multiple accept="image/*,video/*" class="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-bold file:bg-accent/10 file:text-accent hover:file:bg-accent/20 cursor-pointer">
-              </div>
-              <input id="p-vid" class="w-full p-3 border border-slate-300 rounded-lg focus:outline-none focus:border-accent text-right" placeholder="رابط فيديو تضمين (اختياري)">
-              <div class="flex items-center gap-2 mt-1">
-                <input type="checkbox" id="p-offer" class="w-5 h-5 accent-rose-500 cursor-pointer">
-                <label for="p-offer" class="text-slate-700 font-bold cursor-pointer">تعليم كعرض خاص / تخفيض (يظهر باللون الأحمر)</label>
-              </div>
-            </div>
-          `,
-          confirmButtonText: 'نشر المنتج',
-          confirmButtonColor: '#ff6600',
-          showCancelButton: true,
-          cancelButtonText: 'إلغاء',
-          preConfirm: () => {
-            const title = (document.getElementById('p-title') as HTMLInputElement).value;
-            if (!title) {
-              Swal.showValidationMessage('يرجى إدخال اسم المنتج');
-              return false;
-            }
-            
-            const fileInput = document.getElementById('p-images-file') as HTMLInputElement;
-            let filesArray: File[] = [];
-            if (fileInput.files) {
-                filesArray = Array.from(fileInput.files);
-            }
+  const checkPrice = async () => {
+      if (!form.title) return;
+      const advice = await suggestPrice(form.title, form.category);
+      if (advice) setPriceAdvice(advice);
+  };
 
-            return { 
-                title, 
-                price: (document.getElementById('p-price') as HTMLInputElement).value, 
-                category: (document.getElementById('p-category') as HTMLSelectElement).value,
-                condition: (document.getElementById('p-condition') as HTMLSelectElement).value,
-                phone: (document.getElementById('p-phone') as HTMLInputElement).value, 
-                desc: (document.getElementById('p-desc') as HTMLTextAreaElement).value, 
-                files: filesArray, 
-                video: (document.getElementById('p-vid') as HTMLInputElement).value,
-                isOffer: (document.getElementById('p-offer') as HTMLInputElement).checked
-            };
-          }
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    if (files.length === 0) {
+        Swal.fire("خطأ", "يرجى إضافة صورة واحدة على الأقل", "error");
+        return;
+    }
+
+    setIsUploading(true);
+    try {
+        const imageUrls = [];
+        const compressionOptions = {
+            maxSizeMB: 0.5,
+            maxWidthOrHeight: 1200,
+            useWebWorker: true
+        };
+
+        for (const file of files) {
+            // Compress image
+            const compressedFile = await imageCompression(file, compressionOptions);
+            const fileRef = ref(storage, `products/${Date.now()}_${file.name}`);
+            await uploadBytes(fileRef, compressedFile);
+            const url = await getDownloadURL(fileRef);
+            imageUrls.push(url);
+        }
+
+        await addDoc(collection(db, "products"), {
+            ...form,
+            images: imageUrls,
+            user: user.email,
+            userId: user.uid,
+            date: new Date().getTime(),
+            views: 0,
+            likes: [],
+            isArchived: false
         });
 
-        if (isConfirmed && form) {
-          try {
-            Swal.fire({
-                title: 'جاري النشر...',
-                html: 'جاري حفظ بيانات الإعلان...<br>نرجو الانتظار قليلاً.',
-                allowOutsideClick: false,
-                didOpen: () => {
-                    Swal.showLoading();
-                }
-            });
-
-            const imageUrls: string[] = [];
-
-            if (form.files && form.files.length > 0) {
-                const filesToProcess = form.files.slice(0, 4);
-                // Sort so images are processed and pushed before videos
-                filesToProcess.sort((a: File, b: File) => {
-                    const aIsVideo = a.type.startsWith('video/') ? 1 : 0;
-                    const bIsVideo = b.type.startsWith('video/') ? 1 : 0;
-                    return aIsVideo - bIsVideo;
-                });
-
-                for (let i = 0; i < filesToProcess.length; i++) {
-                    const file = filesToProcess[i];
-                    if (file.type.startsWith('video/')) {
-                        try {
-                            const base64Video = await compressVideo(file);
-                            imageUrls.push(base64Video);
-                        } catch(e) {
-                            console.error("Video compression failed", e);
-                        }
-                    } else {
-                        try {
-                            const base64Image = await compressImage(file);
-                            imageUrls.push(base64Image);
-                        } catch(e) {
-                            console.error("Image compression failed", e);
-                        }
-                    }
-                }
-            }
-
-            const shortCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-            await addDoc(collection(db, "products"), {
-              title: form.title,
-              price: form.price,
-              category: form.category || 'أخرى',
-              condition: form.condition || 'جديد',
-              phone: form.phone,
-              desc: form.desc,
-              images: imageUrls,
-              video: form.video,
-              isOffer: form.isOffer,
-              user: user?.email,
-              date: new Date().getTime(),
-              likes: [],
-              featuredUntil: 0,
-              shortCode
-            });
-            Swal.fire("مبروك", "تم عرض منتجك بنجاح", "success");
-          } catch (error: any) {
-            console.error("Upload error:", error);
-            Swal.fire("خطأ", "حدث خطأ أثناء النشر، يرجى المحاولة مرة أخرى.", "error");
-          }
-        }
-    };
-
-    withAd(startPublish);
+        // Notify all users about new product (simulated)
+        // In a real app, this would be a FCM call
+        
+        Swal.fire("تم بنجاح!", "تم نشر إعلانك وهو الآن متاح للجميع.", "success");
+        setIsOpen(false);
+        // Reset form
+        setForm({ title: "", price: "", category: "", description: "", location: "كل الولايات", phone: "", condition: "new" });
+        setFiles([]);
+        setPreviewImages([]);
+    } catch (error) {
+        console.error(error);
+        Swal.fire("خطأ", "حدث خطأ أثناء النشر", "error");
+    } finally {
+        setIsUploading(false);
+    }
   };
 
   return (
-    <button 
-      onClick={handlePublish}
-      className="fixed bottom-8 left-8 w-14 h-14 rounded-full bg-accent text-white flex items-center justify-center shadow-lg shadow-accent/40 z-40 hover:scale-110 hover:rotate-90 transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-accent/50"
-    >
-      <Plus className="w-6 h-6" />
-    </button>
+    <>
+      <button
+        onClick={() => user ? setIsOpen(true) : Swal.fire("تنبيه", "سجل دخولك أولاً لتتمكن من النشر", "info")}
+        className="fixed bottom-24 left-6 w-16 h-16 bg-primary text-white rounded-full shadow-2xl flex items-center justify-center z-50 hover:scale-110 active:scale-95 transition-all"
+      >
+        <Plus size={32} />
+      </button>
+
+      <AnimatePresence>
+        {isOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsOpen(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            
+            <motion.div
+              initial={{ scale: 0.9, y: 20, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.9, y: 20, opacity: 0 }}
+              className="relative w-full max-w-2xl bg-card rounded-[2rem] border shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+            >
+              <div className="p-6 border-b flex justify-between items-center glass">
+                <h2 className="text-xl font-bold flex items-center gap-2">
+                    <Camera className="text-primary" /> إضافة إعلان جديد
+                </h2>
+                <button onClick={() => setIsOpen(false)} className="text-muted-foreground hover:text-foreground">
+                    <Plus className="rotate-45" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
+                {/* Image Upload Area */}
+                <div className="space-y-4">
+                    <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
+                        {previewImages.map((img, i) => (
+                            <img key={i} src={img} className="w-24 h-24 rounded-2xl object-cover border-2 border-primary/20 shrink-0" alt="" />
+                        ))}
+                        <button 
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="w-24 h-24 rounded-2xl border-2 border-dashed border-primary/20 flex flex-col items-center justify-center text-primary/60 hover:bg-primary/5 transition-all shrink-0"
+                        >
+                            <ImageIcon size={24} />
+                            <span className="text-[10px] font-bold mt-1">أضف صور</span>
+                        </button>
+                    </div>
+                    <input type="file" hidden multiple ref={fileInputRef} onChange={handleFileChange} accept="image/*" />
+                    
+                    {previewImages.length > 0 && (
+                        <button 
+                            type="button"
+                            onClick={runAIAnalysis}
+                            disabled={isAnalyzing}
+                            className="w-full py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-purple-500/20 disabled:opacity-70"
+                        >
+                            {isAnalyzing ? <Loader2 className="animate-spin" /> : <Wand2 size={18} />}
+                            وصف تلقائي بالذكاء الاصطناعي (Gemini)
+                        </button>
+                    )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <label className="text-sm font-bold">العنوان</label>
+                        <input 
+                            required
+                            value={form.title}
+                            onChange={e => setForm({...form, title: e.target.value})}
+                            onBlur={checkPrice}
+                            placeholder="مثال: آيفون 15 برور ماكس"
+                            className="w-full p-3 bg-muted rounded-xl outline-none focus:ring-2 ring-primary transition-all"
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-sm font-bold">السعر (دج)</label>
+                        <input 
+                            required
+                            type="number"
+                            value={form.price}
+                            onChange={e => setForm({...form, price: e.target.value})}
+                            placeholder="0.00"
+                            className="w-full p-3 bg-muted rounded-xl outline-none focus:ring-2 ring-primary transition-all"
+                        />
+                        {priceAdvice && <p className="text-[10px] text-primary flex items-center gap-1 animate-in slide-in-from-right-2"><Sparkles size={10} /> {priceAdvice}</p>}
+                    </div>
+                </div>
+
+                <div className="space-y-2">
+                    <label className="text-sm font-bold">الفئة</label>
+                    <select 
+                        required
+                        value={form.category}
+                        onChange={e => setForm({...form, category: e.target.value})}
+                        className="w-full p-3 bg-muted rounded-xl outline-none focus:ring-2 ring-primary transition-all"
+                    >
+                        <option value="">اختر الفئة</option>
+                        <option value="سيارات">سيارات</option>
+                        <option value="إلكترونيات">إلكترونيات</option>
+                        <option value="عقارات">عقارات</option>
+                        <option value="أثاث">أثاث</option>
+                        <option value="ملابس">ملابس</option>
+                        <option value="أخرى">أخرى</option>
+                    </select>
+                </div>
+
+                <div className="space-y-2">
+                    <label className="text-sm font-bold">الوصف</label>
+                    <textarea 
+                        required
+                        rows={4}
+                        value={form.description}
+                        onChange={e => setForm({...form, description: e.target.value})}
+                        placeholder="اكتب تفاصيل المنتج بوضوح..."
+                        className="w-full p-3 bg-muted rounded-xl outline-none focus:ring-2 ring-primary transition-all resize-none"
+                    />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <label className="text-sm font-bold">الموقع</label>
+                        <div className="relative">
+                            <MapPin className="absolute left-3 top-3.5 text-muted-foreground" size={16} />
+                            <input 
+                                value={form.location}
+                                onChange={e => setForm({...form, location: e.target.value})}
+                                className="w-full pl-10 p-3 bg-muted rounded-xl outline-none focus:ring-2 ring-primary transition-all" 
+                            />
+                        </div>
+                    </div>
+                    <div className="space-y-2">
+                        <label className="text-sm font-bold">رقم الهاتف</label>
+                        <input 
+                            required
+                            value={form.phone}
+                            onChange={e => setForm({...form, phone: e.target.value})}
+                            placeholder="05XXXXXXXX"
+                            className="w-full p-3 bg-muted rounded-xl outline-none focus:ring-2 ring-primary transition-all" 
+                        />
+                    </div>
+                </div>
+
+                <button 
+                    disabled={isUploading}
+                    className="w-full py-4 bg-primary text-primary-foreground rounded-2xl font-bold text-lg shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                >
+                    {isUploading ? <Loader2 className="animate-spin" /> : "نشر الإعلان الآن 🚀"}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
-

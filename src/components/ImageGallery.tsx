@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ChevronRight, ChevronLeft, PlayCircle } from "lucide-react";
+import CustomVideoPlayer from "./CustomVideoPlayer";
 
 export default function ImageGallery({ images, fallback }: { images: string[], fallback?: string }) {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -11,24 +12,21 @@ export default function ImageGallery({ images, fallback }: { images: string[], f
   const isVideo = (url: string) => {
     if (!url) return false;
     if (url.startsWith('data:video/')) return true;
-    return /\.(mp4|webm|mov|ogg|avi)($|\?)/i.test(url.toLowerCase()) || url.includes('/video%2F');
+    return /\.(mp4|webm|mov|ogg|avi)($|\?)/i.test(url.toLowerCase()) || url.includes('/video%2F') || url.includes('%2Fvideo');
   };
 
   return (
     <div className="relative w-full mb-6">
-      <div className="w-full aspect-[4/3] sm:aspect-video bg-slate-900 rounded-2xl overflow-hidden relative group shadow-inner">
+      <div className="w-full bg-slate-900 rounded-2xl overflow-hidden relative group shadow-inner flex items-center justify-center min-h-[300px] max-h-[500px]">
         {isVideo(displayImages[currentIndex]) ? (
-            <video 
+            <CustomVideoPlayer 
               src={displayImages[currentIndex]} 
-              controls 
-              loop
-              playsInline
-              className="w-full h-full object-contain transition-opacity duration-300"
+              className="w-full h-full max-h-[500px] transition-opacity duration-300"
             />
         ) : (
             <img 
               src={displayImages[currentIndex]} 
-              className="w-full h-full object-contain transition-opacity duration-300" 
+              className="w-full h-auto max-h-[500px] object-contain transition-opacity duration-300" 
               alt={`Product ${currentIndex + 1}`} 
               onError={(e) => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/600x450?text=صورة+غير+متاحة'; }}
             />

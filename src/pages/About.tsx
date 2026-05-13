@@ -1,13 +1,17 @@
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
+import BackButton from "../components/BackButton";
 import { Sparkles, Shield, Zap, HeartHandshake } from "lucide-react";
 
 export default function About() {
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 selection:bg-accent/20">
+    <div className="min-h-screen flex flex-col bg-slate-50 selection:bg-accent/20" dir="rtl">
       <Navbar />
       
-      <main className="flex-1 w-full max-w-5xl mx-auto px-4 md:px-8 py-16">
+      <main className="flex-1 w-full max-w-5xl mx-auto px-4 md:px-8 py-12">
+        <div className="flex justify-end mb-8">
+            <BackButton />
+        </div>
         
         <div className="text-center space-y-6 mb-16 animate-in slide-in-from-bottom-8 duration-700">
             <h1 className="text-4xl md:text-6xl lg:text-7xl font-black text-slate-900 tracking-tight">

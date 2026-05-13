@@ -1,39 +1,92 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { collection, onSnapshot, orderBy, query, doc, getDoc, updateDoc, deleteDoc, addDoc } from "firebase/firestore";
+import { collection, onSnapshot, orderBy, query, doc, getDoc, updateDoc, deleteDoc, addDoc, getDocs } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { useAuth, ADMIN_EMAIL } from "../context/AuthContext";
 import { useAd } from "../context/AdContext";
 import AdsContainer from "../components/AdsContainer";
+import AdmobBanner from "../components/AdmobBanner";
 import Navbar from "../components/Navbar";
+import AdCarousel from "../components/AdCarousel";
 import AddProductFab from "../components/AddProductFab";
 import ImageGallery from "../components/ImageGallery";
+import CustomVideoPlayer from "../components/CustomVideoPlayer";
 import Footer from "../components/Footer";
 import SellerReviews from "../components/SellerReviews";
 import ProductComments from "../components/ProductComments";
 import TopProgressBar from "../components/TopProgressBar";
-import { Filter, Store, PhoneCall, Trash2, Crown, X, Flag, Heart, Share2, ArrowUp, ShoppingBag, Grid, Home as HomeIcon, LayoutGrid, Smartphone, Wrench, Shirt, Gem, Package, Car, Building2, User, FileText, Camera } from "lucide-react";
+import { ProductSkeleton } from "../components/ui/Skeleton";
+import { Filter, Store, PhoneCall, Trash2, Crown, X, Flag, Heart, Share2, ArrowUp, ShoppingBag, Grid, Home as HomeIcon, LayoutGrid, Smartphone, Wrench, Shirt, Gem, Package, Car, Building2, User, FileText, Camera, ShieldCheck, MapPin } from "lucide-react";
 import Swal from "sweetalert2";
+import { Capacitor } from "@capacitor/core";
+
+import HighResBanner from "../components/HighResBanner";
 
 export default function Home() {
+  const isMobileApp = Capacitor.isNativePlatform();
   const { user, isAdmin } = useAuth();
   const { withAd } = useAd();
   const location = useLocation();
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [products, setProducts] = useState<any[]>([]);
+
   const [ads, setAds] = useState<{ top: any[], bottom: any[], inFeed: any[] }>({
     top: [], bottom: [], inFeed: []
   });
+  const [appSettings, setAppSettings] = useState<any>(null);
+  const [admobSettings, setAdmobSettings] = useState<{ appId: string, adUnitId: string } | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
 
+  const [githubRepo, setGithubRepo] = useState("");
+  const [githubDownloadUrl, setGithubDownloadUrl] = useState("");
+
   useEffect(() => {
-    const unsubscribeAds = onSnapshot(query(collection(db, "global_ads"), orderBy("date", "desc")), (snap) => {
+    const unsubSettings = onSnapshot(doc(db, "global_settings", "app"), async (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setAppSettings(data);
+        
+        const repo = data.githubRepo || 'lebinhytt-spec/ainelhadjelstore';
+        setGithubRepo(repo);
+
+        // Fetch latest release APK automatically
+        try {
+            const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`);
+            const release = await res.json();
+            const apk = release.assets?.find((a: any) => a.name.endsWith('.apk'));
+            if (apk) {
+                setGithubDownloadUrl(apk.browser_download_url);
+            } else {
+                setGithubDownloadUrl(release.html_url);
+            }
+        } catch (e) {
+            console.error("Github fetch failed", e);
+        }
+
+        if (data.admobAppId && data.admobAdUnitId) {
+            setAdmobSettings({
+                appId: data.admobAppId,
+                adUnitId: data.admobAdUnitId
+            });
+        } else {
+            setAdmobSettings(null);
+        }
+      }
+    });
+
+    const unsubscribeAds = onSnapshot(collection(db, "global_ads"), (snap) => {
       let topAds: any[] = [];
       let bottomAds: any[] = [];
       let inFeedAds: any[] = [];
+      const allAds: any[] = [];
       snap.forEach(doc => {
-        const ad = { id: doc.id, ...doc.data() } as any;
+        allAds.push({ id: doc.id, ...doc.data() });
+      });
+      // Filter out invalid ads and sort by date descending
+      const validAds = allAds.filter(ad => ad.date).sort((a, b) => b.date - a.date);
+
+      validAds.forEach(ad => {
         if (ad.position === "top") topAds.push(ad);
         else if (ad.position === "bottom") bottomAds.push(ad);
         else if (ad.position === "in_feed") inFeedAds.push(ad);
@@ -54,23 +107,62 @@ export default function Home() {
         bottom: shuffle(bottomAds), 
         inFeed: shuffle(inFeedAds) 
       });
+    }, (error) => {
+        console.error("Ads loading error:", error);
     });
 
-    const unsubscribeProducts = onSnapshot(query(collection(db, "products"), orderBy("date", "desc")), (snap) => {
+    const unsubscribeProducts = onSnapshot(collection(db, "products"), async (snap) => {
       const prods: any[] = [];
-      snap.forEach(doc => {
-        prods.push({ id: doc.id, ...doc.data() });
+      
+      // Fetch users to map profile data (name, logo, verified)
+      const usersSnap = await getDocs(collection(db, "users"));
+      const usersMap: any = {};
+      usersSnap.forEach(u => {
+          usersMap[u.id] = u.data();
+          usersMap[u.data().email] = u.data(); // double mapping for safety
       });
-      setProducts(prods);
 
+      snap.forEach(doc => {
+        const data = doc.data();
+        const sellerProfile = usersMap[data.user] || usersMap[data.userId];
+        
+        prods.push({ 
+            id: doc.id, 
+            ...data,
+            sellerName: sellerProfile?.displayName || (data.userEmail || data.user).split('@')[0],
+            sellerLogo: sellerProfile?.storeLogo || sellerProfile?.photoURL,
+            sellerVerified: sellerProfile?.isVerified || data.sellerVerified
+        });
+      });
+      // Sort in memory by date descending, handle missing dates
+      prods.sort((a, b) => {
+        const dateA = a.date || 0;
+        const dateB = b.date || 0;
+        return dateB - dateA;
+      });
+      
+      setProducts(prods);
       setIsLoading(false);
+    }, (error) => {
+        console.error("Products loading error:", error);
+        setIsLoading(false);
     });
 
     return () => {
+      unsubSettings();
       unsubscribeAds();
       unsubscribeProducts();
     };
   }, []);
+
+  useEffect(() => {
+    if (selectedProduct) {
+        const updated = products.find(p => p.id === selectedProduct.id);
+        if (updated) {
+            setSelectedProduct(updated);
+        }
+    }
+  }, [products]);
 
   useEffect(() => {
     if (products.length > 0) {
@@ -140,13 +232,14 @@ export default function Home() {
 
   const [animatedHeartId, setAnimatedHeartId] = useState<string | null>(null);
 
-  const handleLike = async (productId: string, e?: any) => {
+    const handleLike = async (product: any, e?: any) => {
     if (e) e.stopPropagation();
     if (!user) {
       Swal.fire("تنبيه", "سجل دخولك للإعجاب", "info");
       return;
     }
-    const productRef = doc(db, "products", productId);
+    
+    const productRef = doc(db, "products", product.id);
     const pDoc = await getDoc(productRef);
     if (!pDoc.exists()) return;
     
@@ -157,35 +250,41 @@ export default function Home() {
       likes = likes.filter((e: string) => e !== user.email);
     } else {
       likes.push(user.email);
-      setAnimatedHeartId(productId);
+      setAnimatedHeartId(product.id);
       setTimeout(() => setAnimatedHeartId(null), 1500);
     }
     await updateDoc(productRef, { likes });
     
     // update current selected product if open
-    if (selectedProduct && selectedProduct.id === productId) {
+    if (selectedProduct && selectedProduct.id === product.id) {
         setSelectedProduct({ ...selectedProduct, likes });
     }
   };
 
   const handleShare = async (product: any) => {
     const codeToShare = product.shortCode || product.id;
-    const shareUrl = `http://ainelhadjelstore.kesug.com/?product=${codeToShare}`;
-    const shareData = {
-      title: product.title,
-      text: `شاهد ${product.title} على متجر عين الحجل!`,
-      url: shareUrl,
-    };
+    const shareUrl = `${window.location.origin}/?product=${codeToShare}`;
+    
+    // Rich sharing text
+    const shareText = `🛒 *إعلان جديد على متجر عين الحجل*\n\n` +
+                     `📦 *المنتج:* ${product.title}\n` +
+                     `💰 *السعر:* ${Number(product.price).toLocaleString('en-US')} دج\n` +
+                     `📍 *الموقع:* ${product.location}\n\n` +
+                     `🔗 تصفح المنتج والاتصال بالبائع:\n${shareUrl}`;
 
     if (navigator.share) {
       try {
-        await navigator.share(shareData);
+        await navigator.share({
+          title: product.title,
+          text: shareText,
+          url: shareUrl,
+        });
       } catch (err) {
         console.log("Error sharing", err);
       }
     } else {
-      await navigator.clipboard.writeText(`${shareData.text}\n${shareData.url}`);
-      Swal.fire("تم النسخ", "تم نسخ رابط المنتج بنجاح", "success");
+      await navigator.clipboard.writeText(shareText);
+      Swal.fire("تم النسخ", "تم نسخ بيانات ورابط المنتج بنجاح لمشاركتها", "success");
     }
   };
 
@@ -252,7 +351,7 @@ export default function Home() {
     }
   };
 
-  const handleDeleteProduct = async (productId: string) => {
+  const handleDeleteProduct = async (product: any) => {
     const { isConfirmed } = await Swal.fire({
       title: 'هل أنت متأكد؟',
       text: "سيتم حذف هذا المنتج نهائياً ولا يمكن التراجع عن ذلك!",
@@ -263,6 +362,8 @@ export default function Home() {
       confirmButtonText: 'نعم، احذفه!',
       cancelButtonText: 'إلغاء'
     });
+
+    const productId = product.id;
 
     if (isConfirmed) {
       try {
@@ -323,21 +424,23 @@ export default function Home() {
                          تخفيض
                     </div>
                 )}
-                <div className="w-full aspect-[4/3] bg-slate-100 overflow-hidden relative">
+                <div className="w-full bg-slate-100/50 overflow-hidden relative flex items-center justify-center">
                     <img 
                         src={thumbnail} 
-                        className="w-full h-full object-cover transition-all duration-700 group-hover:scale-110" 
+                        className="w-full h-auto max-h-[350px] sm:max-h-[450px] object-contain transition-all duration-700 group-hover:scale-[1.03]" 
                         alt={d.title}
                         onError={(e) => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/600x450?text=صورة+غير+متاحة'; }}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/20 to-transparent opacity-80 transition-opacity duration-500"></div>
                     
                     <div className="absolute bottom-3 right-3 left-3 flex justify-between items-end">
-                        <div className="bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-xl shadow-lg border border-white/50">
-                            <p className="font-black text-lg sm:text-xl ltr text-accent" dir="ltr">{d.price} <span className="text-xs font-bold text-slate-500">دج</span></p>
+                        <div className="bg-white/90 backdrop-blur-md px-2 py-1 sm:px-3 sm:py-1.5 rounded-xl shadow-lg border border-white/50">
+                            <p className="font-black text-base sm:text-xl ltr text-accent" dir="ltr">
+                                {Number(d.price).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} <span className="text-[10px] sm:text-xs font-bold text-slate-500">دج</span>
+                            </p>
                         </div>
                         <span 
-                            onClick={(e) => handleLike(d.id, e)}
+                            onClick={(e) => handleLike(d, e)}
                             className="relative flex items-center justify-center w-10 h-10 bg-white/90 backdrop-blur-md hover:bg-rose-50 rounded-full shadow-lg border border-white/50 transition-all cursor-pointer hover:scale-110 active:scale-95 z-20 group/heart"
                         >
                             <Heart className={`w-5 h-5 transition-transform duration-300 ${likesCount > 0 ? 'fill-rose-500 text-rose-500' : 'text-slate-400 group-hover/heart:text-rose-400'} ${animatedHeartId === d.id ? 'scale-150 rotate-12' : ''}`} />
@@ -350,44 +453,44 @@ export default function Home() {
                     </div>
                 </div>
                 
-                <div className="p-4 sm:p-5 flex flex-col flex-1 gap-2 bg-white">
+                <div className="p-3 sm:p-4 flex flex-col flex-1 gap-2">
                     <div className="flex justify-between items-start gap-2">
-                        {d.category && <span className="text-[10px] sm:text-xs font-bold text-accent bg-accent/10 px-2.5 py-1 rounded-lg w-fit">{d.category}</span>}
-                        <div className="flex items-center gap-1 bg-amber-50 px-2 py-1 rounded-lg">
-                            <svg className="w-3.5 h-3.5 fill-amber-400 text-amber-400" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
-                            <span className="text-xs font-bold text-amber-600">{rating}</span>
+                        {d.category && <span className="text-[10px] sm:text-xs font-bold text-primary bg-primary/10 dark:bg-primary/20 px-2 py-0.5 rounded-lg w-fit">{d.category}</span>}
+                        <div className="flex items-center gap-1 bg-amber-50 dark:bg-amber-500/10 px-2 py-0.5 rounded-lg">
+                            <svg className="w-3 h-3 fill-amber-400 text-amber-400" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"></path></svg>
+                            <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400">{rating}</span>
                         </div>
                     </div>
                     
-                    <h3 className={`font-black text-sm sm:text-base leading-snug line-clamp-2 mt-1 transition-colors ${d.isOffer ? 'text-rose-600' : 'text-slate-800'}`}>
+                    <h3 className={`font-bold text-sm sm:text-base leading-snug line-clamp-1 mt-1 transition-colors ${d.isOffer ? 'text-rose-600' : ''}`}>
                         {d.title}
                     </h3>
-                    
-                    <div className="pt-3 mt-auto border-t border-slate-100 flex items-center justify-between">
-                        <span className="flex items-center gap-2 text-xs sm:text-sm text-slate-500 font-medium">
-                            <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center">
-                                <User className="w-3.5 h-3.5 text-slate-400" />
+
+                    <div className="flex items-center justify-between pt-2 mt-auto border-t">
+                        <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center font-bold text-[10px] text-primary shrink-0 overflow-hidden border">
+                                {d.sellerLogo ? (
+                                    <img src={d.sellerLogo} className="w-full h-full object-cover" />
+                                ) : (
+                                    d.sellerName[0]?.toUpperCase()
+                                )}
                             </div>
-                            <span className="truncate max-w-[120px]">{d.user.split('@')[0]}</span>
-                        </span>
-                        
-                        <span className="text-xs font-bold text-accent group-hover:underline underline-offset-4 decoration-accent/30 pointer-events-none">
-                            عرض التفاصيل &larr;
+                            <div className="flex flex-col text-[10px] sm:text-[11px] truncate">
+                                <span className="font-bold flex items-center gap-0.5">
+                                    {d.sellerName}
+                                    {d.sellerVerified && <ShieldCheck size={10} className="text-blue-500" fill="currentColor" />}
+                                </span>
+                                <span className="text-muted-foreground flex items-center gap-1"><MapPin size={8} /> {d.location}</span>
+                            </div>
+                        </div>
+                        <span className="text-[10px] font-black text-primary bg-primary/5 px-2 py-1 rounded-md">
+                            التفاصيل &larr;
                         </span>
                     </div>
                 </div>
             </div>
         );
 
-        if ((i + 1) % 4 === 0 && ads.inFeed.length > 0) {
-            const ad = ads.inFeed[adIndex % ads.inFeed.length];
-            items.push(
-                <div key={`ad-${i}`} className="bg-slate-50 border border-dashed border-accent rounded-[15px] p-2 flex flex-col items-center justify-center">
-                    <AdsContainer code={ad.code} />
-                </div>
-            );
-            adIndex++;
-        }
     }
     return items;
   };
@@ -408,49 +511,77 @@ export default function Home() {
                 <div className="absolute -top-24 -right-24 w-96 h-96 bg-accent/20 blur-3xl rounded-full z-0 pointer-events-none"></div>
                 <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-blue-500/20 blur-3xl rounded-full z-0 pointer-events-none"></div>
 
-                <div className="relative z-20 flex-1 p-6 sm:p-8 md:p-12 text-center md:text-right flex flex-col justify-center w-full">
-                    <div className="inline-flex items-center justify-center md:justify-start gap-2 mb-3 sm:mb-4">
-                        <ShoppingBag className="w-8 h-8 sm:w-10 sm:h-10 text-accent" />
-                        <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight">
+                <div className="relative z-20 flex-1 p-6 text-center md:text-right flex flex-col justify-center w-full">
+                    <div className="inline-flex items-center justify-center md:justify-start gap-2 mb-3">
+                        <ShoppingBag className="w-6 h-6 sm:w-10 sm:h-10 text-accent" />
+                        <h1 className="text-xl sm:text-3xl md:text-4xl font-black text-white tracking-tight">
                             Ain El Hadjel <span className="text-accent">STORE</span>
                         </h1>
                     </div>
                     
-                    <h2 className="text-3xl sm:text-4xl md:text-6xl font-black text-white mb-4 leading-tight drop-shadow-md">
+                    <h2 className="text-2xl sm:text-4xl md:text-6xl font-black text-white mb-3 sm:mb-4 leading-tight drop-shadow-md">
                         أول متجر إلكتروني <br/>
-                        <span className="bg-accent text-white px-3 sm:px-4 py-1 rounded-xl text-3xl sm:text-4xl md:text-6xl mt-2 inline-block shadow-lg shadow-accent/30">في عين الحجل</span>
+                        <span className="bg-accent text-white px-2 sm:px-4 py-1 rounded-lg sm:rounded-xl text-xl sm:text-4xl md:text-6xl mt-2 inline-block shadow-lg shadow-accent/30">في عين الحجل</span>
                     </h2>
                     
-                    <p className="text-base sm:text-lg md:text-xl text-slate-300 font-medium mb-6 sm:mb-8 max-w-lg mx-auto md:mx-0">
+                    <p className="text-sm sm:text-lg md:text-xl text-slate-300 font-medium mb-5 sm:mb-8 max-w-lg mx-auto md:mx-0">
                         منتجات متنوعة وخدمات محلية من أهل بلدنا. تسوق بكل سهولة وأمان وادعم الاقتصاد المحلي.
                     </p>
 
-                    <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-6 sm:mb-8 w-full">
-                        <div className="bg-slate-800/80 backdrop-blur-sm border border-slate-700 p-2 sm:p-4 rounded-2xl flex flex-col items-center justify-center text-center">
-                            <Store className="w-6 h-6 sm:w-8 sm:h-8 text-blue-400 mb-1.5 sm:mb-2" />
-                            <h3 className="text-white font-bold text-[10px] sm:text-sm">خدمات محلية</h3>
-                            <p className="text-slate-400 text-[9px] sm:text-xs mt-1 hidden sm:block">كل ما تحتاجه من مكان واحد</p>
+                    <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-5 sm:mb-8 w-full max-w-sm mx-auto md:max-w-none md:mx-0">
+                        <div className="bg-slate-800/80 backdrop-blur-sm border border-slate-700 p-2 sm:p-4 rounded-xl flex flex-col items-center justify-center text-center">
+                            <Store className="w-5 h-5 sm:w-8 sm:h-8 text-blue-400 mb-1" />
+                            <h3 className="text-white font-bold text-[9px] sm:text-sm">خدمات محلية</h3>
+                            <p className="text-slate-400 text-[8px] sm:text-xs mt-1 hidden sm:block">كل ما تحتاجه</p>
                         </div>
-                        <div className="bg-slate-800/80 backdrop-blur-sm border border-slate-700 p-2 sm:p-4 rounded-2xl flex flex-col items-center justify-center text-center">
-                            <Gem className="w-6 h-6 sm:w-8 sm:h-8 text-orange-400 mb-1.5 sm:mb-2" />
-                            <h3 className="text-white font-bold text-[10px] sm:text-sm">جودة موثوقة</h3>
-                            <p className="text-slate-400 text-[9px] sm:text-xs mt-1 hidden sm:block">من محليين تثق بهم</p>
+                        <div className="bg-slate-800/80 backdrop-blur-sm border border-slate-700 p-2 sm:p-4 rounded-xl flex flex-col items-center justify-center text-center">
+                            <Gem className="w-5 h-5 sm:w-8 sm:h-8 text-orange-400 mb-1" />
+                            <h3 className="text-white font-bold text-[9px] sm:text-sm">جودة موثوقة</h3>
+                            <p className="text-slate-400 text-[8px] sm:text-xs mt-1 hidden sm:block">من محليين</p>
                         </div>
-                        <div className="bg-slate-800/80 backdrop-blur-sm border border-slate-700 p-2 sm:p-4 rounded-2xl flex flex-col items-center justify-center text-center">
-                            <ShoppingBag className="w-6 h-6 sm:w-8 sm:h-8 text-indigo-400 mb-1.5 sm:mb-2" />
-                            <h3 className="text-white font-bold text-[10px] sm:text-sm">تسوق بسهولة</h3>
-                            <p className="text-slate-400 text-[9px] sm:text-xs mt-1 hidden sm:block">منتجات متنوعة بأسعار مناسبة</p>
+                        <div className="bg-slate-800/80 backdrop-blur-sm border border-slate-700 p-2 sm:p-4 rounded-xl flex flex-col items-center justify-center text-center">
+                            <ShoppingBag className="w-5 h-5 sm:w-8 sm:h-8 text-indigo-400 mb-1" />
+                            <h3 className="text-white font-bold text-[9px] sm:text-sm">تسوق بسهولة</h3>
+                            <p className="text-slate-400 text-[8px] sm:text-xs mt-1 hidden sm:block">أسعار مناسبة</p>
                         </div>
                     </div>
 
-                    <div className="flex flex-wrap justify-center md:justify-start gap-4">
+                    <div className="flex flex-wrap justify-center md:justify-start gap-3">
                         <button 
                             onClick={() => { document.getElementById('filters-btn')?.scrollIntoView({ behavior: 'smooth' }) }}
                             className="bg-gradient-to-r from-accent to-orange-500 text-white px-6 sm:px-8 py-3.5 sm:py-4 rounded-xl font-black text-base sm:text-lg transition-all hover:scale-105 shadow-xl shadow-accent/30 flex items-center justify-center gap-2 w-full sm:w-auto"
                         >
                             <ShoppingBag className="w-5 h-5 sm:w-6 sm:h-6" />
-                            تسوق الآن وادعم اقتصادنا
+                            تسوق الآن
                         </button>
+                        
+                        {!isMobileApp && (
+                            <button 
+                                onClick={() => {
+                                    const dl = appSettings?.downloadLink || githubDownloadUrl;
+                                    if (dl) {
+                                        window.open(dl, '_blank');
+                                    } else {
+                                        Swal.fire({
+                                            title: 'تحميل التطبيق',
+                                            text: 'التطبيق متاح للتحميل لهواتف الأندرويد، هل ترغب في المحاولة؟',
+                                            icon: 'question',
+                                            showCancelButton: true,
+                                            confirmButtonText: 'نعم، حمل الآن',
+                                            cancelButtonText: 'لاحقاً'
+                                        }).then((result) => {
+                                            if (result.isConfirmed) {
+                                                Swal.fire('تنبيه', 'يتم العمل على توفير رابط التحميل المباشر حالياً، يرجى المحاولة لاحقاً.', 'info');
+                                            }
+                                        });
+                                    }
+                                }}
+                                className="bg-white/10 backdrop-blur-md text-white border border-white/20 px-6 sm:px-8 py-3.5 sm:py-4 rounded-xl font-black text-base sm:text-lg transition-all hover:bg-white/20 flex items-center justify-center gap-2 w-full sm:w-auto"
+                            >
+                                <Smartphone className="w-5 h-5 sm:w-6 sm:h-6" />
+                                تحميل التطبيق
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
@@ -497,10 +628,19 @@ export default function Home() {
             </div>
         )}
 
+        <AdCarousel />
+
         {/* Top Ads */}
-        {ads.top.length > 0 && activeTab === "all" && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-8">
-            {ads.top.slice(0, 12).map((ad, i) => <AdsContainer key={i} code={ad.code} />)}
+        {(ads.top.length > 0 || admobSettings) && activeTab === "all" && (
+          <div className="flex flex-col gap-4 mb-8">
+            {admobSettings && (
+               <AdmobBanner appId={admobSettings.appId} adUnitId={admobSettings.adUnitId} />
+            )}
+            {ads.top.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 w-full">
+                    {ads.top.slice(0, 12).map((ad, i) => <AdsContainer key={i} code={ad.code} />)}
+                </div>
+            )}
           </div>
         )}
 
@@ -592,8 +732,8 @@ export default function Home() {
 
         {/* Store Grid */}
         {isLoading ? (
-            <div className="flex justify-center items-center py-20">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent"></div>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6 mb-12">
+                {[...Array(8)].map((_, i) => <ProductSkeleton key={i} />)}
             </div>
         ) : (
             <>
@@ -617,9 +757,16 @@ export default function Home() {
         )}
 
         {/* Bottom Ads */}
-        {ads.bottom.length > 0 && activeTab === "all" && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-12">
-            {ads.bottom.slice(0, 12).map((ad, i) => <AdsContainer key={i} code={ad.code} />)}
+        {(ads.bottom.length > 0 || admobSettings) && activeTab === "all" && (
+          <div className="flex flex-col gap-4 mt-12">
+            {admobSettings && (
+               <AdmobBanner appId={admobSettings.appId} adUnitId={admobSettings.adUnitId} />
+            )}
+            {ads.bottom.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 w-full">
+                    {ads.bottom.slice(0, 12).map((ad, i) => <AdsContainer key={i} code={ad.code} />)}
+                </div>
+            )}
           </div>
         )}
 
@@ -657,7 +804,7 @@ export default function Home() {
                 />
 
                 {selectedProduct.video && (
-                    <iframe src={selectedProduct.video} className="w-full h-[300px] sm:h-[400px] lg:h-[450px] rounded-xl border-none mb-4" title="Video" />
+                    <CustomVideoPlayer src={selectedProduct.video} className="w-full h-[300px] sm:h-[400px] lg:h-[450px] rounded-xl border-none mb-4" />
                 )}
 
                 <div className="flex flex-col sm:flex-row justify-between items-start mt-2 gap-4">
@@ -670,7 +817,9 @@ export default function Home() {
                         </div>
                     )}
                 </div>
-                <h3 className="text-3xl sm:text-4xl md:text-5xl font-black bg-gradient-to-r from-accent to-orange-300 text-transparent bg-clip-text mt-3" dir="ltr">{selectedProduct.price} <span className="text-xl sm:text-2xl font-bold text-accent drop-shadow-none">دج</span></h3>
+                <h3 className="text-3xl sm:text-4xl md:text-5xl font-black bg-gradient-to-r from-accent to-orange-300 text-transparent bg-clip-text mt-3" dir="ltr">
+                    {Number(selectedProduct.price).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} <span className="text-xl sm:text-2xl font-bold text-accent drop-shadow-none">دج</span>
+                </h3>
                 
                 <p className="bg-slate-50 p-4 sm:p-5 rounded-xl sm:rounded-2xl mt-4 text-sm sm:text-base text-slate-700 leading-relaxed whitespace-pre-wrap border border-slate-100">
                     {selectedProduct.desc}
@@ -686,7 +835,7 @@ export default function Home() {
 
                 <div className="flex flex-wrap sm:flex-nowrap gap-3 mt-4">
                     <button 
-                        onClick={() => handleLike(selectedProduct.id)}
+                        onClick={() => handleLike(selectedProduct)}
                         className="flex-1 bg-slate-100 text-slate-800 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-slate-200 transition relative"
                     >
                         <Heart className={`w-5 h-5 transition-transform duration-300 ${selectedProduct.likes?.includes(user?.email) ? 'fill-rose-500 text-rose-500' : 'text-slate-500'} ${animatedHeartId === selectedProduct.id ? 'scale-150 rotate-12 fill-rose-500 text-rose-500' : ''}`} />
@@ -737,7 +886,7 @@ export default function Home() {
                     )}
                     {(user?.email === selectedProduct.user || isAdmin) && (
                         <button 
-                            onClick={() => handleDeleteProduct(selectedProduct.id)}
+                            onClick={() => handleDeleteProduct(selectedProduct)}
                             className="flex-none bg-rose-500 text-white p-3 rounded-xl hover:bg-rose-600 transition"
                             title="حذف المنتج"
                         >
@@ -770,7 +919,7 @@ export default function Home() {
                                             <img src={thumb} className="w-full h-28 sm:h-32 object-cover" />
                                             <div className="p-3">
                                                 <h5 className="font-bold text-xs sm:text-sm text-slate-800 truncate">{p.title}</h5>
-                                                <p className="text-accent font-black mt-1 text-sm sm:text-base" dir="ltr">{p.price} دج</p>
+                                                <p className="text-accent font-black mt-1 text-sm sm:text-base" dir="ltr">{Number(p.price).toLocaleString('en-US')} دج</p>
                                             </div>
                                         </div>
                                     )

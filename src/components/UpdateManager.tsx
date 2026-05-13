@@ -24,17 +24,31 @@ export default function UpdateManager() {
     const isTestMode = window.location.search.includes('test_update=true');
     if (!isMobile && !isTestMode) return;
 
-    const unsub = onSnapshot(doc(db, "global_settings", "app"), (docSnap) => {
+    const unsub = onSnapshot(doc(db, "global_settings", "app"), async (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         const serverVersionCode = data.versionCode || 1;
+        const githubRepo = data.githubRepo || "lebinhytt-spec/ainelhadjelstore";
         
         if (serverVersionCode > APP_VERSION_CODE) {
+          let finalDownloadLink = data.downloadLink || "";
+          
+          // Try to get link from GitHub if not provided explicitly
+          if (!finalDownloadLink) {
+              try {
+                  const res = await fetch(`https://api.github.com/repos/${githubRepo}/releases/latest`);
+                  const release = await res.json();
+                  const apk = release.assets?.find((a: any) => a.name.endsWith(".apk"));
+                  if (apk) finalDownloadLink = apk.browser_download_url;
+                  else finalDownloadLink = release.html_url;
+              } catch(e) {}
+          }
+
           setUpdateData({
             versionCode: serverVersionCode,
-            forceUpdate: data.forceUpdate || false,
-            releaseNotes: data.releaseNotes || '',
-            downloadLink: data.downloadLink || ''
+            forceUpdate: true, // Always forced as requested
+            releaseNotes: data.releaseNotes || 'إصدار جديد متوفر مع تحسينات ومميزات لخدمتكم بشكل أفضل.',
+            downloadLink: finalDownloadLink
           });
           setShowUpdate(true);
         } else {

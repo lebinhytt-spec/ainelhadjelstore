@@ -4,23 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>متجر عين الحجل - الأول في المدينة</title>
-    <script>
-      // Prevent libraries (like whatwg-fetch) from throwing when trying to polyfill fetch
-      try {
-        const originalFetch = window.fetch;
-        if (originalFetch) {
-          Object.defineProperty(window, 'fetch', {
-            get: function() { return originalFetch; },
-            set: function(newFetch) {
-              console.warn('Blocked attempt to reassign window.fetch');
-            },
-            configurable: true
-          });
-        }
-      } catch (e) {
-        console.error('Error in defensive fetch script', e);
-      }
-    </script>
     <link rel="icon" type="image/x-icon" href="/favicon.ico">
     <link rel="icon" type="image/png" href="/favicon.png">
     <link rel="apple-touch-icon" href="/favicon.png">
